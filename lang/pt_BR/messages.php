@@ -5,9 +5,9 @@
 // problem+json titles/details, toasts, modals) MUST be defined here and
 // resolved via __() — never hardcoded as a literal in PHP or JSX.
 return [
-    'app' => [
-        'name' => 'Slide Studio',
-    ],
+    // Brand name comes from config('app.name') — shared with the frontend via
+    // the Inertia `app` prop (see HandleInertiaRequests.php). No hardcoded
+    // brand text in PHP/JSX; no lang fallback for the brand either.
     'topbar' => [
         'slides_panel_tip' => 'Painel de slides',
         'open_slides' => 'Abrir slides',
@@ -187,7 +187,7 @@ return [
     ],
     'browser' => [
         'warn_title' => 'Navegador não suportado',
-        'warn_body' => 'O editor funciona melhor no Chrome, Edge ou Firefox. No Safari, a edição no iframe pode ser limitada.',
+        'warn_body' => 'O editor funciona melhor no Chrome, Edge ou Firefox. No Safari, partes da edição podem ficar limitadas.',
         'dismiss' => 'Entendi',
     ],
     'slide' => [
@@ -238,5 +238,16 @@ return [
         'only_owner_can_share' => 'Apenas proprietários podem compartilhar',
         'readonly_mode' => 'Modo leitura',
         'invalid_role' => 'Função inválida',
+    ],
+    'context_menu' => [
+        'duplicate' => 'Duplicar',
+        'copy' => 'Copiar',
+        'cut' => 'Recortar',
+        'paste' => 'Colar',
+        'bring_forward' => 'Trazer para frente',
+        'send_backward' => 'Enviar para trás',
+        'group' => 'Agrupar',
+        'ungroup' => 'Desagrupar',
+        'delete' => 'Excluir',
     ],
 ];

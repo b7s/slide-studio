@@ -116,7 +116,7 @@ For every backend change, apply the skill's patterns. Summary of the mandatory r
 - Inertia pages live in `resources/js/Pages/**/*.jsx`, resolved by `import.meta.glob` in `resources/js/app.jsx`. Component path = Inertia name (e.g. `Editor/Index`).
 - UI primitives: `resources/js/Components/ui/*.jsx` (shadcn-style, built on Radix + `cn` util). Editor-specific layout/logic: `resources/js/editor/*.jsx`; the responsive 3-column shell is `resources/js/editor/AppShell.jsx`.
 - Backend returns `Inertia::render('Editor/Index', [...])` for pages and plain `response()->json()` for everything under `/api/*` (see `routes/web.php`). **New API endpoints must use `/api/v1/...`.**
-- Slide canvas is an `<iframe>`; its HTML is served dynamically by `GET /api/v1/slides/html?file=...` (`EditorController`), NOT a static file. `sandbox="allow-same-origin allow-scripts"`.
+- **Slide canvas is an open Shadow DOM root**, not an `<iframe>` — see `resources/js/editor/SlideCanvas.jsx`. The shadow root provides CSS isolation (slide styles can't leak into the editor chrome) while staying in the same document, so React context menus, drag overlays and keyboard shortcuts work natively without bridging. The engine (`slideEditor.js`) accepts a shadow root instead of `iframe.contentDocument`. **Preview-in-new-tab** still uses `GET /api/v1/slides/html?file=...`, the dedicated preview URL stays intact.
 
 ## Gotchas
 - **Sessions table is missing in Laravel 13's default migrations.** `.env` uses `SESSION_DRIVER=file` for this reason. Switching to `database` sessions will 500 until you add a `sessions` migration. (Tests already use `array`.)

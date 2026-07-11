@@ -82,10 +82,10 @@ export default function Topbar({
         )}
         <div className="flex items-center gap-3">
           <div className="grid size-9 place-items-center rounded-lg bg-gradient-to-br from-[#16283a] to-[#0a141d] shadow-md">
-            <span className="text-sm font-bold text-white">G4</span>
+            <span className="text-sm font-bold text-white">{app.short}</span>
           </div>
           <div className="min-w-0">
-            <h1 className="text-sm font-semibold leading-tight">{__("messages.app.name")}</h1>
+            <h1 className="text-sm font-semibold leading-tight">{app.name}</h1>
             <p className="truncate text-[11px] font-medium text-[var(--muted-foreground)]">
               {selectedFile || deckPath || __("messages.topbar.loading_presentation")}
             </p>
@@ -180,6 +180,7 @@ export default function Topbar({
 
 function UserMenu() {
   const user = usePage().props.auth?.user;
+  const app = usePage().props.app ?? { name: "Slide Studio", short: "SS" };
   const initials = user?.name
     ? user.name.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase()
     : "?";

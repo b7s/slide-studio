@@ -3,9 +3,9 @@
 // English fallback for the default application strings.
 // Mirrors lang/pt_BR/messages.php — only keys that need an English fallback.
 return [
-    'app' => [
-        'name' => 'Slide Studio',
-    ],
+    // Brand name comes from config('app.name') — shared with the frontend via
+    // the Inertia `app` prop (see HandleInertiaRequests.php). No hardcoded
+    // brand text in PHP/JSX; no lang fallback for the brand either.
     'topbar' => [
         'slides_panel_tip' => 'Slides panel',
         'open_slides' => 'Open slides',
@@ -185,7 +185,7 @@ return [
     ],
     'browser' => [
         'warn_title' => 'Unsupported browser',
-        'warn_body' => 'The editor works best in Chrome, Edge, or Firefox. In Safari, iframe editing may be limited.',
+        'warn_body' => 'The editor works best in Chrome, Edge, or Firefox. In Safari, some editing features may be limited.',
         'dismiss' => 'Got it',
     ],
     'slide' => [
@@ -236,5 +236,16 @@ return [
         'only_owner_can_share' => 'Only owners can share',
         'readonly_mode' => 'View only',
         'invalid_role' => 'Invalid role',
+    ],
+    'context_menu' => [
+        'duplicate' => 'Duplicate',
+        'copy' => 'Copy',
+        'cut' => 'Cut',
+        'paste' => 'Paste',
+        'bring_forward' => 'Bring forward',
+        'send_backward' => 'Send backward',
+        'group' => 'Group',
+        'ungroup' => 'Ungroup',
+        'delete' => 'Delete',
     ],
 ];

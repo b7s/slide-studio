@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Head, Link } from "@inertiajs/react";
+import { Head, Link, usePage } from "@inertiajs/react";
 import { Button } from "../../Components/ui/button";
 import { Input } from "../../Components/ui/input";
 import { Label } from "../../Components/ui/label";
@@ -9,6 +9,7 @@ export default function Login({ errors, status }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const app = usePage().props.app ?? { name: "Slide Studio", short: "SS" };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -26,9 +27,9 @@ export default function Login({ errors, status }) {
       <div className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 shadow-lg">
         <div className="mb-6 text-center">
           <div className="mx-auto mb-3 grid size-10 place-items-center rounded-lg bg-gradient-to-br from-[#16283a] to-[#0a141d] shadow-md">
-            <span className="text-sm font-bold text-white">G4</span>
+            <span className="text-sm font-bold text-white">{app.short}</span>
           </div>
-          <h1 className="text-xl font-semibold">{__("messages.app.name")}</h1>
+          <h1 className="text-xl font-semibold">{app.name}</h1>
           <p className="text-sm text-[var(--muted-foreground)]">{__("messages.auth.login_subtitle")}</p>
         </div>
 

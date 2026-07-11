@@ -7,7 +7,7 @@ Replica of G4 Slide Studio: a slide presentation editor (like PowerPoint) powere
 - **Backend**: Laravel 13, PHP 8.4 — renders only a single root Blade view; **no Blade-rendered UI**
 - **Frontend**: React (latest) + Inertia.js — **owns 100% of every interface** (topbar, sidebar, workspace, inspector, modals, toasts, banners, context menus, every input/control). All panels are React components driven by Inertia props, not Blade.
 - **UI**: shadcn/ui for all interface components (built on Radix + Tailwind)
-- **Slide rendering**: iframe-based canvas (1600×900) — slides are HTML files
+- **Slide rendering**: Shadow-DOM canvas (open Shadow Root on a 1600×900 host) — slides are HTML files; CSS is scoped to the shadow root so slide styles can't leak into the editor chrome, while React/Radix overlays, context menus and keyboard shortcuts all work natively (no iframe bridging). Preview-in-new-tab still uses `GET /api/v1/slides/html`.
 - **Database**: SQLite for now (zero-setup, fast to iterate); migrate to PostgreSQL later via env-driven driver — no schema changes required
 - **Persistence model**: both **auto-save** (debounced timer every N seconds while dirty) **and** manual **Save** button (immediate). Save writes the slide HTML + revision to the DB.
 
@@ -156,8 +156,9 @@ Implemented under `routes/api.php` with the `/api/v1` prefix (skill mandate: ver
 - [ ] **Table**: detect table cell selection; add/remove rows/cols; move row/col; row-height & col-width fields (deferred).
 - [x] **Actions**: group/ungroup, make absolute, clear formatting.
 - [x] **Clear formatting**: strip inline styles on selected element.
-- [ ] **Context menu** (right-click on canvas): cut/copy/paste/duplicate/delete/bring forward/send backward/group/ungroup (deferred; commands exist, toolbar/inspector expose them).
-- [x] **Keyboard shortcuts**: undo/redo (Ctrl+Z / Ctrl+Y), copy/cut/paste (Ctrl+C/X/V), delete (Del/Backspace), arrow-key nudge, escape to deselect.
+- [x] **Context menu** (right-click on canvas): Custom React `<ContextMenu>` (extends existing engine commands) — copy / cut / paste / duplicate / bring forward / send backward / group / ungroup / delete. Captured via `onContextMenu` from the shadow root.
+- [x] **Keyboard shortcuts**: undo/redo (Ctrl+Z / Ctrl+Y), copy/cut/paste (Ctrl+C/X/V), delete (Del/Backspace), arrow-key nudge, escape to deselect, plus Ctrl+D duplicate.
+- [x] **Canvas = Shadow DOM (iframe replacement)** — the editor canvas is now an open Shadow DOM root (`SlideCanvas.jsx`) instead of an `<iframe>`. CSS isolation is preserved (slide styles can't leak into the chrome), but the host lives in the same document so React/Radix context menus, drag/resize overlays, and keyboard shortcuts work natively — no iframe::contentDocument bridging, no `SameOrigin` requirement for the bridge. Engine (`slideEditor.js`) accepts a shadow root instead of `doc`/`win`; overlays position via `host.offsetWidth` ÷ scaled rect for zoom transforms. **Preview-in-new-tab** still uses `/api/v1/slides/html` so the dedicated preview URL stays intact.
 
 ### Phase 5 — Commands & persistence
 - [x] Slide save flow: diff current HTML vs saved snapshot → enable Save button → POST `/api/v1/slides/{file}` with html + revision (optimistic concurrency: 409 surfaces conflict); update `savedSnapshot` + `revision`.
@@ -195,7 +196,7 @@ Implemented under `routes/api.php` with the `/api/v1` prefix (skill mandate: ver
 | 1 — Domain model | Done |
 | 2 — Backend API | Done (versioned `/api/v1` + audit + Problem+JSON; gates 8/8) |
 | 3 — Editor shell | Done (responsive Topbar/Sidebar/Workspace/Inspector bound to live `/api/v1`) |
-| 4 — Editing engine | Done (iframe engine: selection/drag/resize/inline text/commands/history/keyboard) — icon/table/context-menu sub-features deferred |
+| 4 — Editing engine | Done (shadow-DOM canvas: selection/drag/resize/inline text/commands/history/keyboard/right-click context menu) — icon/table inspectors deferred |
 | 5 — Persistence | Done (manual save + 5s auto-save + duplicate + reorder + reload + preview) — templates-copy deferred |
 | 6 — AI hook | Done (`laravel/ai` + structured `SlideDeckGenerator` + state-machine `Generation` + provider failover + frontend `GenerateDialog`); editor auth wall deferred |
 | 7 — Polish & QA | Done (Sonner toasts, a11y labels + focus-visible rings, Safari-compat banner, localized strings); dark mode + responsive visual tests deferred |

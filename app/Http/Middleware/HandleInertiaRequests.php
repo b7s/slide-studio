@@ -34,10 +34,45 @@ class HandleInertiaRequests extends Middleware
             'locale' => app()->getLocale(),
             'translations' => $this->translations(app()->getLocale()),
             'routes' => $this->routes(),
+            'app' => [
+                'name' => config('app.name'),
+                'short' => $this->brandShort(config('app.name')),
+            ],
             'auth' => [
                 'user' => $request->user(),
             ],
         ]);
+    }
+
+    /**
+     * Build an initials-style brand badge (≤ 3 chars) from the app name.
+     * "Slide Studio" → "SS". Pure config-driven; if the configured name is
+     * missing, returns an empty string rather than a hardcoded fallback.
+     */
+    private function brandShort(string $name): string
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return '';
+        }
+
+        $tokens = preg_split('/\s+/u', $name, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        $letters = '';
+        foreach ($tokens as $token) {
+            $char = mb_substr($token, 0, 1);
+            if (function_exists('mb_strtoupper')) {
+                $char = mb_strtoupper($char);
+            } else {
+                $char = strtoupper($char);
+            }
+            $letters .= $char;
+            if (mb_strlen($letters) >= 3) {
+                break;
+            }
+        }
+
+        return $letters;
     }
 
     /**

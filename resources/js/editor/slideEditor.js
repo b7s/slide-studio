@@ -1,8 +1,13 @@
-// Slide editor engine. Operates directly on a slide iframe's `document`
-// (same-origin, so the parent can reach it). Owns selection, drag/resize,
-// inline text editing, style/command application, undo/redo history and a
-// small clipboard. React supplies callbacks for html / selection / edit-mode
-// changes; commands are invoked from the Toolbar and Inspector.
+// Slide editor engine. Operates on a Shadow DOM root that hosts the slide
+// HTML. The shadow root provides CSS isolation (slide styles do not leak into
+// the editor chrome) while staying inside the same document, so React-based
+// context menus, drag overlays and keyboard shortcuts all work natively — no
+// iframe bridging needed.
+//
+// Owns selection, drag/resize, inline text editing, style/command
+// application, undo/redo history and a small clipboard. React supplies
+// callbacks for html / selection / edit-mode / context-menu changes;
+// commands are invoked from the Toolbar and Inspector.
 
 const HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 
@@ -16,8 +21,8 @@ function boxOf(el) {
   return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
 }
 
-function snapshot(doc) {
-  return doc.documentElement.outerHTML;
+function snapshot(root) {
+  return root.innerHTML;
 }
 
 function parseBox(el) {
@@ -30,7 +35,7 @@ function parseBox(el) {
   };
 }
 
-export function createSlideEditor({ doc, win, onChange, onSelection, onEditingChange }) {
+export function createSlideEditor({ root, onChange, onSelection, onEditingChange, onContextMenu }) {
   let selected = null;
   let editing = false;
   let overlay = null;
@@ -41,10 +46,10 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
   let resize = null;
 
   const slideRoot = () =>
-    doc.querySelector("[data-slide], .slide, .slide-root") || doc.body.firstElementChild || doc.body;
+    root.querySelector("[data-slide], .slide, .slide-root") || root.firstElementChild || root;
 
   function pushHistory() {
-    const snap = snapshot(doc);
+    const snap = snapshot(root);
     if (history[histIndex] === snap) return;
     history = history.slice(0, histIndex + 1);
     history.push(snap);
@@ -54,7 +59,7 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
   }
 
   function emit() {
-    onChange(snapshot(doc));
+    onChange(snapshot(root));
   }
 
   function selectionInfo() {
@@ -96,16 +101,16 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
   }
 
   function buildOverlay() {
-    const ov = doc.createElement("div");
-    ov.setAttribute("data-g4-overlay", "1");
-    ov.style.position = "fixed";
+    const ov = document.createElement("div");
+    ov.setAttribute("data-slide-overlay", "1");
+    ov.style.position = "absolute";
     ov.style.pointerEvents = "none";
     ov.style.border = "1.5px solid #b9915b";
     ov.style.zIndex = "2147483646";
     ov.style.boxSizing = "border-box";
     HANDLES.forEach((pos) => {
-      const h = doc.createElement("div");
-      h.setAttribute("data-g4-handle", pos);
+      const h = document.createElement("div");
+      h.setAttribute("data-slide-handle", pos);
       h.style.position = "absolute";
       h.style.width = "10px";
       h.style.height = "10px";
@@ -116,7 +121,7 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
       h.style.cursor = cursorFor(pos);
       ov.appendChild(h);
     });
-    doc.body.appendChild(ov);
+    root.appendChild(ov);
     return ov;
   }
 
@@ -132,14 +137,25 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
   function positionOverlay() {
     if (!overlay || !selected) return;
     const r = selected.getBoundingClientRect();
-    overlay.style.left = `${r.left}px`;
-    overlay.style.top = `${r.top}px`;
-    overlay.style.width = `${r.width}px`;
-    overlay.style.height = `${r.height}px`;
-    const handles = overlay.querySelectorAll("[data-g4-handle]");
+    const host = root.host;
+    const sr = host.getBoundingClientRect();
+    // The host may carry a CSS transform (zoom) — its layout box
+    // (`offsetWidth`/`offsetHeight`) is unscaled, so `sr.width` divided by
+    // that is the scale factor. Convert the post-transform screen delta
+    // into the unscaled local coordinate space the overlay lives in.
+    const scale = sr.width > 0 ? sr.width / Math.max(1, host.offsetWidth) : 1;
+    const x = (r.left - sr.left) / scale;
+    const y = (r.top - sr.top) / scale;
+    const w = r.width / scale;
+    const h = r.height / scale;
+    overlay.style.left = `${x}px`;
+    overlay.style.top = `${y}px`;
+    overlay.style.width = `${w}px`;
+    overlay.style.height = `${h}px`;
+    const handles = overlay.querySelectorAll("[data-slide-handle]");
     handles.forEach((h) => {
-      const pos = h.getAttribute("data-g4-handle");
-      const [hx, hy] = handleXY(pos, r.width, r.height);
+      const pos = h.getAttribute("data-slide-handle");
+      const [hx, hy] = handleXY(pos, w, h);
       h.style.left = `${hx - 5}px`;
       h.style.top = `${hy - 5}px`;
     });
@@ -159,7 +175,7 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
   }
 
   function select(el) {
-    if (!el || el === doc.body || el === slideRoot() || el.getAttribute("data-g4-overlay") !== null) {
+    if (!el || el === root || el === slideRoot() || el.getAttribute("data-slide-overlay") !== null) {
       clearSelection();
       return;
     }
@@ -192,7 +208,7 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
 
   // ---- pointer interactions (drag + resize) ----
   function onPointerDown(e) {
-    const handle = e.target.getAttribute && e.target.getAttribute("data-g4-handle");
+    const handle = e.target.getAttribute && e.target.getAttribute("data-slide-handle");
     if (handle) {
       e.preventDefault();
       const r = selected.getBoundingClientRect();
@@ -202,8 +218,8 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
         startY: e.clientY,
         box: parseBox(selected),
       };
-      win.addEventListener("pointermove", onPointerMove);
-      win.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
       return;
     }
     if (e.target === overlay) {
@@ -215,8 +231,8 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
         baseX: num(selected.style.left) || num(cs.left) || 0,
         baseY: num(selected.style.top) || num(cs.top) || 0,
       };
-      win.addEventListener("pointermove", onPointerMove);
-      win.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", onPointerUp);
     }
   }
 
@@ -242,8 +258,8 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
   }
 
   function onPointerUp() {
-    win.removeEventListener("pointermove", onPointerMove);
-    win.removeEventListener("pointerup", onPointerUp);
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
     if ((drag || resize) && selected) {
       drag = null;
       resize = null;
@@ -287,20 +303,18 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
   function applyTextCommand(cmd) {
     if (!selected || !editing) return;
     selected.focus();
-    doc.execCommand(cmd, false, null);
+    document.execCommand(cmd, false, null);
     emit();
   }
 
   function remove() {
     if (!selected) return;
-    const parent = selected.parentNode;
     selected.remove();
     selected = null;
     if (overlay) overlay.style.display = "none";
     onSelection(null);
     pushHistory();
     emit();
-    void parent;
   }
 
   function zStep(dir) {
@@ -313,8 +327,8 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
 
   function group() {
     if (!selected) return;
-    const wrap = doc.createElement("div");
-    wrap.setAttribute("data-g4-group", "1");
+    const wrap = document.createElement("div");
+    wrap.setAttribute("data-slide-group", "1");
     selected.parentNode.insertBefore(wrap, selected);
     wrap.appendChild(selected);
     select(wrap);
@@ -323,7 +337,7 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
   }
 
   function ungroup() {
-    if (!selected || !selected.getAttribute("data-g4-group")) return;
+    if (!selected || !selected.getAttribute("data-slide-group")) return;
     const parent = selected.parentNode;
     while (selected.firstChild) parent.insertBefore(selected.firstChild, selected);
     parent.removeChild(selected);
@@ -354,13 +368,22 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
 
   function paste() {
     if (!clipboard) return;
-    const tmp = doc.createElement("div");
+    const tmp = document.createElement("div");
     tmp.innerHTML = clipboard;
     const node = tmp.firstElementChild;
     if (!node) return;
     (selected || slideRoot()).appendChild(node);
     pushHistory();
     emit();
+  }
+
+  function duplicate() {
+    if (!selected) return;
+    copy();
+    paste();
+    const nodes = (selected || slideRoot()).children;
+    const node = nodes[nodes.length - 1];
+    if (node) select(node);
   }
 
   function nudge(dx, dy) {
@@ -383,9 +406,7 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
   }
 
   function restore() {
-    const tmp = doc.createElement("div");
-    tmp.innerHTML = history[histIndex];
-    doc.documentElement.replaceWith(tmp.firstElementChild);
+    root.innerHTML = history[histIndex];
     clearSelection();
     emit();
   }
@@ -393,8 +414,16 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
   // ---- document-level listeners ----
   function onDocClick(e) {
     if (e.target === overlay) return;
-    if (e.target.getAttribute && e.target.getAttribute("data-g4-handle")) return;
+    if (e.target.getAttribute && e.target.getAttribute("data-slide-handle")) return;
     select(e.target);
+  }
+
+  function onContextMenu(e) {
+    e.preventDefault();
+    select(e.target);
+    if (onContextMenu) {
+      onContextMenu(e.clientX, e.clientY, !!selected);
+    }
   }
 
   function onDocInput() {
@@ -409,23 +438,25 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
     positionOverlay();
   }
 
-  doc.addEventListener("click", onDocClick, true);
-  doc.addEventListener("pointerdown", onPointerDown, true);
-  doc.addEventListener("input", onDocInput, true);
-  doc.addEventListener("blur", onDocBlur, true);
-  win.addEventListener("scroll", onScrollOrResize, true);
-  win.addEventListener("resize", onScrollOrResize, true);
+  root.addEventListener("click", onDocClick, true);
+  root.addEventListener("pointerdown", onPointerDown, true);
+  root.addEventListener("contextmenu", onContextMenu, true);
+  root.addEventListener("input", onDocInput, true);
+  root.addEventListener("blur", onDocBlur, true);
+  window.addEventListener("scroll", onScrollOrResize, true);
+  window.addEventListener("resize", onScrollOrResize, true);
   if (overlay) positionOverlay();
 
   function destroy() {
-    doc.removeEventListener("click", onDocClick, true);
-    doc.removeEventListener("pointerdown", onPointerDown, true);
-    doc.removeEventListener("input", onDocInput, true);
-    doc.removeEventListener("blur", onDocBlur, true);
-    win.removeEventListener("scroll", onScrollOrResize, true);
-    win.removeEventListener("resize", onScrollOrResize, true);
-    win.removeEventListener("pointermove", onPointerMove);
-    win.removeEventListener("pointerup", onPointerUp);
+    root.removeEventListener("click", onDocClick, true);
+    root.removeEventListener("pointerdown", onPointerDown, true);
+    root.removeEventListener("contextmenu", onContextMenu, true);
+    root.removeEventListener("input", onDocInput, true);
+    root.removeEventListener("blur", onDocBlur, true);
+    window.removeEventListener("scroll", onScrollOrResize, true);
+    window.removeEventListener("resize", onScrollOrResize, true);
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
     if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
   }
 
@@ -446,6 +477,7 @@ export function createSlideEditor({ doc, win, onChange, onSelection, onEditingCh
     copy,
     cut,
     paste,
+    duplicate,
     undo,
     redo,
     getSelected: () => selected,

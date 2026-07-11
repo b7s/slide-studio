@@ -39,6 +39,7 @@ export function EditorProvider({
     initialFile ?? slides[0]?.file ?? initialSlides[0]?.file ?? null
   );
   const [html, setHtml] = useState("");
+  const [loadNonce, setLoadNonce] = useState(0);
   const [savedSnapshot, setSavedSnapshot] = useState("");
   const [revision, setRevision] = useState(null);
   const [statusKey, setStatusKey] = useState("messages.editor.ready");
@@ -80,6 +81,7 @@ export function EditorProvider({
         const content = await api.fetchSlideHtml(file);
         setHtml(content);
         setSavedSnapshot(content);
+        setLoadNonce((n) => n + 1);
         setRevision(meta?.revision ?? null);
         setStatusKey("messages.editor.ready");
         setStatusTone("ready");
@@ -208,7 +210,7 @@ export function EditorProvider({
   }, []);
 
   // The Workspace registers the live slideEditor engine here so the toolbar
-  // and inspector can dispatch commands against the iframe document.
+  // and inspector can dispatch commands against the shadow-rooted slide.
   const registerEngine = useCallback((engine) => {
     engineRef.current = engine;
     if (!engine) setSelection(null);
@@ -317,6 +319,7 @@ export function EditorProvider({
       presentationId,
       presentationSlug,
       permissions,
+      slideKey: loadNonce,
       deckRoot,
       templateRoot,
       selection,
@@ -345,6 +348,7 @@ export function EditorProvider({
       presentationId,
       presentationSlug,
       permissions,
+      loadNonce,
       deckRoot,
       templateRoot,
       selection,

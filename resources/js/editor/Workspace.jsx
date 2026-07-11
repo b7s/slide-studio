@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../Components/ui/button";
 import { Badge } from "../Components/ui/badge";
 import { useEditor } from "./EditorContext";
-import { slideHtmlUrl } from "../lib/api";
 import { __ } from "../lib/i18n";
+import SlideCanvas from "./SlideCanvas";
+import ContextMenu from "./ContextMenu";
 import {
   Undo2,
   Redo2,
@@ -19,6 +20,11 @@ import {
   AlertCircle,
   Loader2,
   Pencil,
+  ClipboardCopy,
+  CornerUpRight,
+  CornerUpLeft,
+  Group as GroupIcon,
+  Ungroup,
 } from "lucide-react";
 
 const FRAME_W = 1600;
@@ -26,7 +32,9 @@ const FRAME_H = 900;
 
 export default function Workspace() {
   const {
+    html,
     selectedFile,
+    slideKey,
     dirty,
     statusKey,
     statusTone,
@@ -39,10 +47,11 @@ export default function Workspace() {
     cmd,
     save,
     reload,
+    permissions,
   } = useEditor();
 
   const stageRef = useRef(null);
-  const frameRef = useRef(null);
+  const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const onHtmlChangeRef = useRef(onHtmlChange);
   const onSelectionRef = useRef(onEngineSelection);
@@ -51,6 +60,9 @@ export default function Workspace() {
   onSelectionRef.current = onEngineSelection;
   editModeRef.current = editMode;
   const [zoom, setZoom] = useState(100);
+  const [menu, setMenu] = useState(null);
+
+  const readOnly = !(permissions?.canEdit ?? false);
 
   useEffect(() => {
     const el = stageRef.current;
@@ -67,44 +79,48 @@ export default function Workspace() {
     return () => ro.disconnect();
   }, []);
 
+  // (Re)build the engine whenever the slide HTML is replaced (new file).
+  // We key on `slideKey` (EditorContext.loadNonce, bumped on every fresh
+  // load) — not on `selectedFile` (which can be set before the HTML arrives)
+  // and not on the live `html` string (which changes on every keystroke).
   useEffect(() => {
-    const frame = frameRef.current;
-    if (!frame) return undefined;
+    const canvas = canvasRef.current;
+    if (!canvas || !canvas.shadow) return undefined;
     let disposed = false;
-    const onLoad = async () => {
-      engineRef.current?.destroy();
-      const doc = frame.contentDocument;
-      const win = frame.contentWindow;
-      if (!doc || !win) return;
+    let engine = null;
+
+    (async () => {
+      const shadow = canvas.shadow;
+      if (disposed) return;
       const { createSlideEditor } = await import("./slideEditor");
       if (disposed) return;
-      const engine = createSlideEditor({
-        doc,
-        win,
+      engine = createSlideEditor({
+        root: shadow,
         onChange: (h) => onHtmlChangeRef.current(h),
         onSelection: (info) => onSelectionRef.current(info),
         onEditingChange: () => {},
+        onContextMenu: (x, y, hasSelection) => {
+          setMenu({ x, y, hasSelection });
+        },
       });
       engine.setEditing(editModeRef.current);
       engineRef.current = engine;
       registerEngine(engine);
-    };
-    frame.addEventListener("load", onLoad);
+    })();
+
     return () => {
       disposed = true;
-      frame.removeEventListener("load", onLoad);
-      engineRef.current?.destroy();
+      engine?.destroy();
       engineRef.current = null;
       registerEngine(null);
     };
-  }, [registerEngine, selectedFile]);
+  }, [registerEngine, slideKey]);
 
   useEffect(() => {
     engineRef.current?.setEditing(editMode);
   }, [editMode]);
 
-  // Keyboard shortcuts (bound to the parent document; the engine forwards
-  // iframe events via bubbling because same-origin frames share focus flow).
+  // Keyboard shortcuts (same-document events now — no iframe focus bridging needed).
   useEffect(() => {
     const onKey = (e) => {
       const engine = engineRef.current;
@@ -119,6 +135,11 @@ export default function Workspace() {
       if (mod && e.key.toLowerCase() === "y") {
         e.preventDefault();
         engine.redo();
+        return;
+      }
+      if (mod && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        engine.duplicate();
         return;
       }
       if (editModeRef.current) return;
@@ -151,8 +172,25 @@ export default function Workspace() {
   const toolBtn =
     "text-[var(--ink-soft)] hover:text-[var(--foreground)] hover:bg-[var(--navy)]/5";
 
+  const contextItems = menu && menu.hasSelection ? [
+    { icon: <ClipboardCopy className="size-3.5" />, label: __("messages.context_menu.duplicate"), onClick: cmd.duplicate },
+    { separator: true },
+    { icon: <Copy className="size-3.5" />, label: __("messages.context_menu.copy"), onClick: cmd.copy },
+    { icon: <Scissors className="size-3.5" />, label: __("messages.context_menu.cut"), onClick: cmd.cut },
+    { icon: <Clipboard className="size-3.5" />, label: __("messages.context_menu.paste"), onClick: cmd.paste },
+    { separator: true },
+    { icon: <CornerUpRight className="size-3.5" />, label: __("messages.context_menu.bring_forward"), onClick: cmd.bringForward },
+    { icon: <CornerUpLeft className="size-3.5" />, label: __("messages.context_menu.send_backward"), onClick: cmd.sendBackward },
+    { icon: <GroupIcon className="size-3.5" />, label: __("messages.context_menu.group"), onClick: cmd.group },
+    { icon: <Ungroup className="size-3.5" />, label: __("messages.context_menu.ungroup"), onClick: cmd.ungroup },
+    { separator: true },
+    { icon: <Trash2 className="size-3.5" />, label: __("messages.context_menu.delete"), onClick: cmd.remove, danger: true },
+  ] : [
+    { icon: <Clipboard className="size-3.5" />, label: __("messages.context_menu.paste"), onClick: cmd.paste },
+  ];
+
   return (
-    <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
+    <section className="relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
       <div className="pointer-events-none absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2">
         <div className="pointer-events-auto flex items-center gap-0.5 rounded-xl border border-[var(--border)] bg-white/90 p-1 shadow-lg backdrop-blur">
           <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.undo")} onClick={cmd.undo} className={toolBtn}>
@@ -175,6 +213,15 @@ export default function Workspace() {
           <Button
             variant="ghost"
             size="icon-sm"
+            aria-label={__("messages.context_menu.duplicate")}
+            onClick={cmd.duplicate}
+            className={toolBtn}
+          >
+            <ClipboardCopy />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
             aria-label={__("messages.workspace.delete")}
             onClick={cmd.remove}
             className="text-[var(--red)] hover:bg-[var(--red)]/10"
@@ -192,6 +239,7 @@ export default function Workspace() {
             aria-label={__("messages.workspace.edit_slide")}
             aria-pressed={editMode}
             onClick={toggleEditMode}
+            disabled={readOnly}
             className={editMode ? "text-[var(--gold-strong)] bg-[var(--navy)]/5" : toolBtn}
           >
             <Pencil />
@@ -219,15 +267,16 @@ export default function Workspace() {
         style={{ backgroundSize: "22px 22px" }}
       >
         <div
-          className="aspect-video w-[1600px] origin-center rounded-xl bg-[var(--navy)] shadow-2xl"
-          style={{ transform: `scale(${zoom / 100})` }}
+          className="relative rounded-xl bg-[var(--navy)] shadow-2xl"
+          style={{ width: `${FRAME_W}px`, height: `${FRAME_H}px`, transform: `scale(${zoom / 100})`, transformOrigin: "center" }}
         >
-          <iframe
-            ref={frameRef}
-            title={__("messages.workspace.preview_title")}
-            className="size-full rounded-xl border-0"
-            sandbox="allow-same-origin allow-scripts"
-            src={selectedFile ? slideHtmlUrl(selectedFile) : "about:blank"}
+          <SlideCanvas
+            key={slideKey}
+            ref={canvasRef}
+            html={html}
+            frameWidth={FRAME_W}
+            frameHeight={FRAME_H}
+            className="rounded-xl overflow-hidden"
           />
         </div>
       </div>
@@ -242,12 +291,18 @@ export default function Workspace() {
           <Button variant="ghost" size="sm" onClick={reload} aria-label={__("messages.topbar.reload")}>
             {__("messages.workspace.reload")}
           </Button>
-          <Button variant="save" size="sm" disabled={!dirty} onClick={() => save(false)}>
+          <Button variant="save" size="sm" disabled={!dirty || readOnly} onClick={() => save(false)}>
             <Save />
             {__("messages.workspace.save")}
           </Button>
         </div>
       </div>
+
+      <ContextMenu
+        position={menu}
+        items={contextItems}
+        onClose={() => setMenu(null)}
+      />
     </section>
   );
 }
