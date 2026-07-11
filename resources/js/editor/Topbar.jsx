@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Button } from "../Components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "../Components/ui/tabs";
 import { Badge } from "../Components/ui/badge";
@@ -14,6 +13,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { useEditorPanels } from "./EditorPanelsContext";
+import { useEditor } from "./EditorContext";
 import { __ } from "../lib/i18n";
 
 function IconTip({ label, children }) {
@@ -40,7 +40,13 @@ export default function Topbar({
   onOpenInspectorSheet,
   onOpenHelp,
   onOpenPaths,
+  onSave,
+  onReload,
+  onPreview,
 }) {
+  const { dirty, save, reload, preview } = useEditor();
+  const effectiveDirty = unsaved ?? dirty;
+
   return (
     <header className="z-30 col-span-full flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2.5 shadow-[0_1px_2px_rgba(23,35,45,0.05),0_18px_42px_-34px_rgba(23,35,45,0.32)] sm:px-4">
       <div className="flex min-w-0 items-center gap-2">
@@ -99,17 +105,17 @@ export default function Topbar({
           </Button>
         </IconTip>
         <IconTip label={__("messages.topbar.preview")}>
-          <Button variant="ghost" size="icon" aria-label={__("messages.topbar.preview")}>
+          <Button variant="ghost" size="icon" aria-label={__("messages.topbar.preview")} onClick={onPreview ?? preview}>
             <Eye />
           </Button>
         </IconTip>
         <IconTip label={__("messages.topbar.reload")}>
-          <Button variant="ghost" size="icon" aria-label={__("messages.topbar.reload")}>
+          <Button variant="ghost" size="icon" aria-label={__("messages.topbar.reload")} onClick={onReload ?? reload}>
             <RotateCw />
           </Button>
         </IconTip>
         <IconTip label={__("messages.topbar.save_html")}>
-          <Button variant="save" disabled={!unsaved} className="gap-1.5">
+          <Button variant="save" disabled={!effectiveDirty} className="gap-1.5" onClick={onSave ?? save}>
             <Code2 className="hidden sm:block" />
             <span className="hidden sm:inline">{__("messages.topbar.save_changes")}</span>
             <ArrowDownToLine className="sm:hidden" />

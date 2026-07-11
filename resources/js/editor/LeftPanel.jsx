@@ -1,14 +1,51 @@
-import { Badge } from "../Components/ui/badge";
+import { useState } from "react";
 import { Button } from "../Components/ui/button";
 import { Input } from "../Components/ui/input";
 import { ScrollArea } from "../Components/ui/scroll-area";
 import { Tooltip, TooltipTrigger, TooltipContent } from "../Components/ui/tooltip";
-import { List, Files } from "lucide-react";
+import { List, Files, ChevronUp, ChevronDown } from "lucide-react";
+import { useEditor } from "./EditorContext";
 import { __ } from "../lib/i18n";
 
 export default function LeftPanel({ slides, selectedFile, onSelect, count }) {
+  const { selectFile, duplicate, reorder } = useEditor();
+  const [dupName, setDupName] = useState("");
+
+  const handleDuplicate = () => {
+    const name = dupName.trim();
+    if (!name) return;
+    duplicate(name);
+    setDupName("");
+  };
+
+  const move = (direction) => {
+    const index = slides.findIndex((s) => s.file === selectedFile);
+    if (index < 0) return;
+    const target = direction === "up" ? index - 1 : index + 1;
+    if (target < 0 || target >= slides.length) return;
+    const next = [...slides];
+    const [moved] = next.splice(index, 1);
+    next.splice(target, 0, moved);
+    const order = {};
+    next.forEach((s, i) => {
+      order[s.file] = i;
+    });
+    reorder(order);
+    selectFile(moved.file);
+  };
+
+  const onKeyDown = (e) => {
+    if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      e.preventDefault();
+      move(e.key === "ArrowUp" ? "up" : "down");
+    }
+  };
+
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--sidebar)] p-4 shadow-sm">
+    <div
+      className="flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--sidebar)] p-4 shadow-sm"
+      onKeyDown={onKeyDown}
+    >
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
           <h2 className="text-base font-semibold">{__("messages.sidebar.title")}</h2>
@@ -73,15 +110,53 @@ export default function LeftPanel({ slides, selectedFile, onSelect, count }) {
       </ScrollArea>
 
       <div className="mt-3 flex items-center gap-2 border-t border-[var(--border)] pt-3">
-        <Input placeholder={__("messages.sidebar.duplicate_placeholder")} className="h-10" />
+        <Input
+          placeholder={__("messages.sidebar.duplicate_placeholder")}
+          className="h-10"
+          value={dupName}
+          onChange={(e) => setDupName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleDuplicate();
+          }}
+        />
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="outline" size="icon-sm" aria-label={__("messages.sidebar.duplicate")}>
+            <Button variant="outline" size="icon-sm" aria-label={__("messages.sidebar.duplicate")} onClick={handleDuplicate}>
               <Files />
             </Button>
           </TooltipTrigger>
           <TooltipContent>{__("messages.sidebar.duplicate_tip")}</TooltipContent>
         </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              aria-label={__("messages.sidebar.move_up")}
+              onClick={() => move("up")}
+            >
+              <ChevronUp />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{__("messages.sidebar.move_up_tip")}</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon-sm"
+              aria-label={__("messages.sidebar.move_down")}
+              onClick={() => move("down")}
+            >
+              <ChevronDown />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{__("messages.sidebar.move_down_tip")}</TooltipContent>
+        </Tooltip>
+      </div>
+
+      <div className="sr-only">
+        <span>{__("messages.sidebar.alt_hint")}</span>
       </div>
     </div>
   );

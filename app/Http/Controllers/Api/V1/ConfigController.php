@@ -12,8 +12,8 @@ final class ConfigController extends Controller
     {
         return response()->json([
             'mode' => 'local',
-            'deckRoot' => '/apresentacao',
-            'templateRoot' => '/modelos',
+            'deckRoot' => '/presentation',
+            'templateRoot' => '/templates',
             'deckAvailable' => true,
             'templatesAvailable' => true,
             'previewOrigin' => '',

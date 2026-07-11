@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "../Components/ui/button";
 import { Input } from "../Components/ui/input";
 import { Label } from "../Components/ui/label";
@@ -18,32 +18,54 @@ import {
   ChevronsUp,
   ChevronsDown,
 } from "lucide-react";
+import { useEditor } from "./EditorContext";
 import { __ } from "../lib/i18n";
 
-function ColorField({ label, id }) {
-  const [value, setValue] = useState("#001F35");
+const FONTS = ["Inter", "Georgia", "Roboto", "Arial", "Times New Roman", "Courier New"];
+
+function toHex(color) {
+  if (!color) return "#000000";
+  if (color.startsWith("#")) return color;
+  const m = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (!m) return "#000000";
+  const hex = (n) => Number(n).toString(16).padStart(2, "0");
+  return `#${hex(m[1])}${hex(m[2])}${hex(m[3])}`;
+}
+
+function num(v) {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : "";
+}
+
+function ColorField({ label, value, onChange }) {
+  const hex = toHex(value);
   return (
     <Label>
       <span>{label}</span>
       <span className="flex h-8 items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--secondary)] p-1 pl-1.5">
         <input
           type="color"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
+          value={hex}
+          onChange={(e) => onChange(e.target.value)}
           className="h-5 w-5 rounded border-0 bg-transparent p-0"
         />
-        <span className="truncate text-[11.5px] font-semibold uppercase">{value}</span>
+        <span className="truncate text-[11.5px] font-semibold uppercase">{hex}</span>
       </span>
     </Label>
   );
 }
 
-function NumberField({ label, unit }) {
+function NumberField({ label, unit, value, onChange }) {
   return (
     <Label>
       <span>{label}</span>
       <span className="relative flex items-center">
-        <Input type="number" className="pr-7 text-right" />
+        <Input
+          type="number"
+          className="pr-7 text-right"
+          value={value ?? ""}
+          onChange={(e) => onChange?.(e.target.value)}
+        />
         {unit && (
           <span className="pointer-events-none absolute right-2 text-[11px] text-[var(--muted-foreground)]">
             {unit}
@@ -54,7 +76,7 @@ function NumberField({ label, unit }) {
   );
 }
 
-function Section({ id, label, children, defaultOpen = false }) {
+function Section({ id, label, children }) {
   return (
     <AccordionItem value={id}>
       <AccordionTrigger>{label}</AccordionTrigger>
@@ -63,8 +85,23 @@ function Section({ id, label, children, defaultOpen = false }) {
   );
 }
 
-export default function Inspector({ selectedLabel }) {
+export default function Inspector() {
+  const { selection, cmd } = useEditor();
   const [tab, setTab] = useState("props");
+  const [nudgeStep, setNudgeStep] = useState(8);
+
+  const s = selection;
+  const box = s?.box ?? {};
+  const st = s?.styles ?? {};
+  const disabled = !s;
+
+  const [text, setText] = useState("");
+  useEffect(() => {
+    setText(s?.text ?? "");
+  }, [s]);
+
+  const setStyle = (prop, value) => cmd.setStyle(prop, value);
+  const setPx = (prop, value) => cmd.setStyle(prop, value === "" ? "" : `${value}px`);
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--sidebar)] shadow-sm">
@@ -77,7 +114,7 @@ export default function Inspector({ selectedLabel }) {
         </div>
 
         <p className="mx-4 mb-1 mt-3 truncate text-[11.5px] font-medium text-[var(--muted-foreground)]">
-          {selectedLabel || __("messages.inspector.no_selection")}
+          {s ? s.tag : __("messages.inspector.no_selection")}
         </p>
 
         <TabsContent value="props" className="flex-1 overflow-auto px-4 pb-4">
@@ -85,45 +122,38 @@ export default function Inspector({ selectedLabel }) {
             <Section id="text" label={__("messages.inspector.section_text")}>
               <textarea
                 rows={4}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
                 placeholder={__("messages.inspector.text_placeholder")}
                 className="min-h-[84px] w-full resize-y rounded-md border border-[var(--border)] bg-[var(--secondary)] p-2 text-sm focus:border-[var(--focus)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
               />
               <div className="flex overflow-hidden rounded-md border border-[var(--border)] bg-[var(--secondary)]">
-                <button className="flex h-8 flex-1 items-center justify-center border-r border-[var(--border)] font-bold hover:bg-[var(--navy)]/5" aria-label={__("messages.inspector.bold")}>
+                <button onClick={() => cmd.applyTextCommand("bold")} className="flex h-8 flex-1 items-center justify-center border-r border-[var(--border)] font-bold hover:bg-[var(--navy)]/5" aria-label={__("messages.inspector.bold")}>
                   <Bold className="size-4" />
                 </button>
-                <button className="flex h-8 flex-1 items-center justify-center border-r border-[var(--border)] italic hover:bg-[var(--navy)]/5" aria-label={__("messages.inspector.italic")}>
+                <button onClick={() => cmd.applyTextCommand("italic")} className="flex h-8 flex-1 items-center justify-center border-r border-[var(--border)] italic hover:bg-[var(--navy)]/5" aria-label={__("messages.inspector.italic")}>
                   <Italic className="size-4" />
                 </button>
-                <button className="flex h-8 flex-1 items-center justify-center hover:bg-[var(--navy)]/5" aria-label={__("messages.inspector.list")}>
+                <button onClick={() => cmd.applyTextCommand("insertUnorderedList")} className="flex h-8 flex-1 items-center justify-center hover:bg-[var(--navy)]/5" aria-label={__("messages.inspector.list")}>
                   <List className="size-4" />
-                </button>
-                <button className="flex h-8 flex-1 items-center justify-center border-l border-[var(--border)] text-xs font-semibold hover:bg-[var(--navy)]/5">
-                  {__("messages.inspector.edit")}
-                </button>
-                <button className="flex h-8 flex-1 items-center justify-center border-l border-[var(--border)] text-xs font-semibold hover:bg-[var(--navy)]/5">
-                  {__("messages.inspector.parent")}
                 </button>
               </div>
             </Section>
 
             <Section id="position" label={__("messages.inspector.section_position")}>
               <div className="grid grid-cols-2 gap-2">
-                <NumberField label={__("messages.inspector.label_x")} unit="px" />
-                <NumberField label={__("messages.inspector.label_y")} unit="px" />
-                <NumberField label={__("messages.inspector.label_w")} unit="px" />
-                <NumberField label={__("messages.inspector.label_h")} unit="px" />
+                <NumberField label={__("messages.inspector.label_x")} unit="px" value={num(st.left) || box.x} onChange={(v) => setPx("left", v)} />
+                <NumberField label={__("messages.inspector.label_y")} unit="px" value={num(st.top) || box.y} onChange={(v) => setPx("top", v)} />
+                <NumberField label={__("messages.inspector.label_w")} unit="px" value={num(st.width) || box.w} onChange={(v) => setPx("width", v)} />
+                <NumberField label={__("messages.inspector.label_h")} unit="px" value={num(st.height) || box.h} onChange={(v) => setPx("height", v)} />
               </div>
               <div className="grid grid-cols-2 items-end gap-2">
-                <Label>
-                  <span>{__("messages.inspector.step")}</span>
-                  <NumberField label="" unit="px" />
-                </Label>
+                <NumberField label={__("messages.inspector.step")} unit="px" value={nudgeStep} onChange={(v) => setNudgeStep(Number(v) || 1)} />
                 <div className="grid grid-cols-4 gap-1 rounded-md border border-[var(--border)] bg-[var(--secondary)] p-1">
-                  <Button variant="ghost" size="icon-sm" aria-label={__("messages.layers.left")}><ChevronDown className="rotate-90" /></Button>
-                  <Button variant="ghost" size="icon-sm" aria-label={__("messages.layers.up")}><ChevronUp /></Button>
-                  <Button variant="ghost" size="icon-sm" aria-label={__("messages.layers.down")}><ChevronDown /></Button>
-                  <Button variant="ghost" size="icon-sm" aria-label={__("messages.layers.right")}><ChevronUp className="rotate-90" /></Button>
+                  <Button variant="ghost" size="icon-sm" disabled={disabled} onClick={() => cmd.nudge(-nudgeStep, 0)} aria-label={__("messages.layers.left")}><ChevronDown className="rotate-90" /></Button>
+                  <Button variant="ghost" size="icon-sm" disabled={disabled} onClick={() => cmd.nudge(0, -nudgeStep)} aria-label={__("messages.layers.up")}><ChevronUp /></Button>
+                  <Button variant="ghost" size="icon-sm" disabled={disabled} onClick={() => cmd.nudge(0, nudgeStep)} aria-label={__("messages.layers.down")}><ChevronDown /></Button>
+                  <Button variant="ghost" size="icon-sm" disabled={disabled} onClick={() => cmd.nudge(nudgeStep, 0)} aria-label={__("messages.layers.right")}><ChevronUp className="rotate-90" /></Button>
                 </div>
               </div>
             </Section>
@@ -131,115 +161,92 @@ export default function Inspector({ selectedLabel }) {
             <Section id="typography" label={__("messages.inspector.section_typography")}>
               <Label>
                 <span>{__("messages.inspector.font")}</span>
-                <select className="h-9 w-full rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 text-sm focus:border-[var(--focus)] focus:outline-none">
-                  <option>Inter</option>
-                  <option>Georgia</option>
-                  <option>Roboto</option>
+                <select
+                  value={st.fontFamily?.replace(/["']/g, "") || ""}
+                  onChange={(e) => setStyle("fontFamily", e.target.value)}
+                  className="h-9 w-full rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 text-sm focus:border-[var(--focus)] focus:outline-none"
+                >
+                  <option value="" />
+                  {FONTS.map((f) => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
                 </select>
               </Label>
               <div className="grid grid-cols-2 gap-2">
-                <NumberField label={__("messages.inspector.size")} unit="px" />
-                <NumberField label={__("messages.inspector.line_height")} />
-                <NumberField label={__("messages.inspector.letter_spacing")} unit="px" />
-                <NumberField label={__("messages.inspector.opacity")} />
+                <NumberField label={__("messages.inspector.size")} unit="px" value={num(st.fontSize)} onChange={(v) => setPx("fontSize", v)} />
+                <NumberField label={__("messages.inspector.line_height")} value={num(st.lineHeight)} onChange={(v) => setStyle("lineHeight", v)} />
+                <NumberField label={__("messages.inspector.letter_spacing")} unit="px" value={num(st.letterSpacing)} onChange={(v) => setPx("letterSpacing", v)} />
+                <NumberField label={__("messages.inspector.opacity")} value={num(st.opacity)} onChange={(v) => setStyle("opacity", v)} />
               </div>
             </Section>
 
-            <Section id="color" label={__("messages.inspector.section_color")} defaultOpen>
+            <Section id="color" label={__("messages.inspector.section_color")}>
               <div className="grid grid-cols-2 gap-2">
-                <ColorField label={__("messages.inspector.color_text")} id="fcolor" />
-                <ColorField label={__("messages.inspector.color_fill")} id="fbg" />
+                <ColorField label={__("messages.inspector.color_text")} value={st.color} onChange={(v) => setStyle("color", v)} />
+                <ColorField label={__("messages.inspector.color_fill")} value={st.backgroundColor} onChange={(v) => setStyle("backgroundColor", v)} />
               </div>
               <Label>
                 <span>{__("messages.inspector.gradient_image")}</span>
-                <Input placeholder="linear-gradient(…)" />
+                <Input
+                  placeholder={__("messages.inspector.gradient_placeholder")}
+                  onBlur={(e) => e.target.value && setStyle("background", e.target.value)}
+                />
               </Label>
             </Section>
 
-            <Section id="shape" label={__("messages.inspector.section_shape")} defaultOpen>
+            <Section id="shape" label={__("messages.inspector.section_shape")}>
               <div className="grid grid-cols-2 gap-2">
-                <NumberField label={__("messages.inspector.radius")} unit="px" />
-                <NumberField label={__("messages.inspector.border")} unit="px" />
+                <NumberField label={__("messages.inspector.radius")} unit="px" value={num(st.borderRadius)} onChange={(v) => setPx("borderRadius", v)} />
+                <NumberField label={__("messages.inspector.border")} unit="px" value={num(st.borderWidth)} onChange={(v) => setPx("borderWidth", v)} />
                 <Label>
                   <span>{__("messages.inspector.style")}</span>
-                  <select className="h-9 w-full rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 text-sm">
-                    <option>{__("messages.inspector.style_auto")}</option>
-                    <option>{__("messages.inspector.style_none")}</option>
-                    <option>{__("messages.inspector.style_solid")}</option>
-                    <option>{__("messages.inspector.style_dashed")}</option>
+                  <select
+                    value={st.borderStyle || ""}
+                    onChange={(e) => setStyle("borderStyle", e.target.value)}
+                    className="h-9 w-full rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 text-sm"
+                  >
+                    <option value="">{__("messages.inspector.style_auto")}</option>
+                    <option value="none">{__("messages.inspector.style_none")}</option>
+                    <option value="solid">{__("messages.inspector.style_solid")}</option>
+                    <option value="dashed">{__("messages.inspector.style_dashed")}</option>
                   </select>
                 </Label>
-                <ColorField label={__("messages.inspector.border_color")} id="fborder" />
+                <ColorField label={__("messages.inspector.border_color")} value={st.borderColor} onChange={(v) => setStyle("borderColor", v)} />
               </div>
               <Label>
                 <span>{__("messages.inspector.shadow")}</span>
-                <Input placeholder="0 10px 30px rgba(0,0,0,.2)" />
+                <Input
+                  placeholder={__("messages.inspector.shadow_placeholder")}
+                  onBlur={(e) => e.target.value && setStyle("boxShadow", e.target.value)}
+                />
               </Label>
-              <Button variant="secondary" className="w-full">{__("messages.inspector.use_as_image")}</Button>
             </Section>
 
             <Section id="media" label={__("messages.inspector.section_media")}>
               <Label>
                 <span>{__("messages.inspector.image_source")}</span>
-                <Input placeholder="assets/imagem.png ou URL" />
+                <Input placeholder={__("messages.inspector.image_placeholder")} />
               </Label>
               <div className="grid grid-cols-2 gap-2">
-                <Button variant="secondary">{__("messages.inspector.replace")}</Button>
-                <Button variant="secondary">{__("messages.inspector.remove")}</Button>
-                <Button variant="secondary">{__("messages.inspector.cover")}</Button>
-                <Button variant="secondary">{__("messages.inspector.contain")}</Button>
+                <Button variant="secondary" disabled={disabled} onClick={() => setStyle("objectFit", "cover")}>{__("messages.inspector.cover")}</Button>
+                <Button variant="secondary" disabled={disabled} onClick={() => setStyle("objectFit", "contain")}>{__("messages.inspector.contain")}</Button>
               </div>
             </Section>
 
-            <Section id="icon" label={__("messages.inspector.section_icon")}>
-              <div className="grid grid-cols-[1fr_auto_auto] items-end gap-1.5">
-                <Label className="grid-cols-1">
-                  <span>{__("messages.inspector.type")}</span>
-                  <select className="h-9 w-full rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 text-sm">
-                    <option>{__("messages.inspector.icon_checkmark")}</option>
-                    <option>X</option>
-                    <option>{__("messages.inspector.icon_right_arrow")}</option>
-                  </select>
-                </Label>
-                <Button variant="secondary">{__("messages.inspector.add")}</Button>
-                <Button variant="secondary">{__("messages.inspector.rem")}</Button>
-              </div>
-            </Section>
-
-            <Section id="table" label={__("messages.inspector.section_table")}>
-              <p className="text-[11.5px] text-[var(--muted-foreground)]">{__("messages.inspector.table_hint")}</p>
+            <Section id="actions" label={__("messages.inspector.section_actions")}>
               <div className="grid grid-cols-2 gap-1.5">
-                {[
-                  __("messages.inspector.add_row"),
-                  __("messages.inspector.rem_row"),
-                  __("messages.inspector.add_col"),
-                  __("messages.inspector.rem_col"),
-                  __("messages.inspector.up_row"),
-                  __("messages.inspector.down_row"),
-                  __("messages.inspector.left_col"),
-                  __("messages.inspector.right_col"),
-                ].map((t) => (
-                  <Button key={t} variant="secondary" className="h-7 px-1.5 text-[11.5px]">
-                    {t}
-                  </Button>
-                ))}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <NumberField label={__("messages.inspector.row_height")} unit="px" />
-                <NumberField label={__("messages.inspector.col_width")} unit="px" />
-              </div>
-            </Section>
-
-            <Section id="actions" label={__("messages.inspector.section_actions")} defaultOpen>
-              <div className="grid grid-cols-2 gap-1.5">
-                <Button variant="secondary">{__("messages.inspector.group")}</Button>
-                <Button variant="secondary">{__("messages.inspector.ungroup")}</Button>
-                <Button variant="secondary">{__("messages.inspector.make_absolute")}</Button>
-                <Button variant="secondary">{__("messages.inspector.lift_to_slide")}</Button>
+                <Button variant="secondary" disabled={disabled} onClick={cmd.group}>{__("messages.inspector.group")}</Button>
+                <Button variant="secondary" disabled={disabled} onClick={cmd.ungroup}>{__("messages.inspector.ungroup")}</Button>
+                <Button variant="secondary" disabled={disabled} onClick={() => setStyle("position", "absolute")}>{__("messages.inspector.make_absolute")}</Button>
               </div>
             </Section>
           </Accordion>
-          <Button variant="outline" className="mt-3 w-full border-[var(--red)] text-[var(--red)] hover:bg-[var(--red)]/10">
+          <Button
+            variant="outline"
+            disabled={disabled}
+            onClick={cmd.clearFormatting}
+            className="mt-3 w-full border-[var(--red)] text-[var(--red)] hover:bg-[var(--red)]/10"
+          >
             {__("messages.inspector.clear_formatting")}
           </Button>
         </TabsContent>
@@ -247,29 +254,14 @@ export default function Inspector({ selectedLabel }) {
         <TabsContent value="layers" className="flex-1 overflow-auto px-4 pb-4">
           <div className="grid gap-2">
             <div className="grid grid-cols-4 gap-1.5">
-              <Button variant="secondary" size="icon" aria-label={__("messages.layers.forward")}><ChevronUp /></Button>
-              <Button variant="secondary" size="icon" aria-label={__("messages.layers.backward")}><ChevronDown /></Button>
-              <Button variant="secondary" size="icon" aria-label={__("messages.layers.front")}><ChevronsUp /></Button>
-              <Button variant="secondary" size="icon" aria-label={__("messages.layers.back")}><ChevronsDown /></Button>
+              <Button variant="secondary" size="icon" disabled={disabled} onClick={cmd.bringForward} aria-label={__("messages.layers.forward")}><ChevronUp /></Button>
+              <Button variant="secondary" size="icon" disabled={disabled} onClick={cmd.sendBackward} aria-label={__("messages.layers.backward")}><ChevronDown /></Button>
+              <Button variant="secondary" size="icon" disabled={disabled} onClick={cmd.bringForward} aria-label={__("messages.layers.front")}><ChevronsUp /></Button>
+              <Button variant="secondary" size="icon" disabled={disabled} onClick={cmd.sendBackward} aria-label={__("messages.layers.back")}><ChevronsDown /></Button>
             </div>
-            <div className="grid gap-1">
-              {["Título", "Subtítulo", "Imagem de fundo", "Logo"].map((name, i) => (
-                <button
-                  key={name}
-                  className="flex items-center justify-between rounded-md border border-[var(--border)] bg-[var(--secondary)] p-2 text-left hover:border-[var(--gold)]"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-[11.5px] font-semibold">{name}</span>
-                    <span className="block truncate text-[10.5px] text-[var(--muted-foreground)]">
-                      {name}
-                    </span>
-                  </span>
-                  <span className="rounded-full border border-[var(--border)] px-1.5 text-[10px] text-[var(--muted-foreground)]">
-                    {i + 1}
-                  </span>
-                </button>
-              ))}
-            </div>
+            <p className="text-[11.5px] text-[var(--muted-foreground)]">
+              {s ? s.tag : __("messages.inspector.no_selection")}
+            </p>
           </div>
         </TabsContent>
       </Tabs>

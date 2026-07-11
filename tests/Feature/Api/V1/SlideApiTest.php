@@ -17,8 +17,8 @@ function seedPresentation(): Presentation
         'user_id' => $user->id,
         'title' => 'Demo',
         'slug' => 'demo-'.uniqid(),
-        'deck_path' => '/apresentacao',
-        'template_path' => '/modelos',
+        'deck_path' => '/presentation',
+        'template_path' => '/templates',
     ]);
 
     Slide::create(['presentation_id' => $presentation->id, 'filename' => '01-a.html', 'title' => 'A', 'position' => 1, 'source_mode' => SourceMode::Deck]);

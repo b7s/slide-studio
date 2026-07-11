@@ -22,9 +22,9 @@ class SamplePresentationSeeder extends Seeder
         $presentation = Presentation::create([
             'user_id' => $user->id,
             'title' => 'Apresentação de demonstração',
-            'slug' => 'apresentacao-demo',
-            'deck_path' => '/apresentacao',
-            'template_path' => '/modelos',
+            'slug' => 'presentation-demo',
+            'deck_path' => '/presentation',
+            'template_path' => '/templates',
             'settings' => ['theme' => 'navy-gold'],
         ]);
 

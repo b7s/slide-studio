@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { EditorPanelsProvider, useEditorPanels } from "./EditorPanelsContext";
+import { useEditor } from "./EditorContext";
 import { useMediaQuery } from "./useMediaQuery";
 import Topbar from "./Topbar";
 import LeftPanel from "./LeftPanel";
@@ -27,7 +28,7 @@ function HelpDialog({ open, onOpenChange }) {
           <div>
             <p className="mb-1 font-semibold">{__("messages.help.structure_heading")}</p>
             <pre className="overflow-x-auto rounded-lg bg-[var(--secondary)] p-3 text-xs">
-              minha-apresentacao/{"\n"}├── 01-capa.html{"\n"}├── 02-agenda.html{"\n"}└── assets/logo.svg
+              my-presentation/{"\n"}├── 01-capa.html{"\n"}├── 02-agenda.html{"\n"}└── assets/logo.svg
             </pre>
           </div>
           <div>
@@ -45,7 +46,7 @@ function HelpDialog({ open, onOpenChange }) {
   );
 }
 
-function PathsPopover({ anchor, open, onOpenChange }) {
+function PathsPopover({ anchor, open, onOpenChange, deckRoot, templateRoot }) {
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{anchor}</PopoverTrigger>
@@ -54,14 +55,14 @@ function PathsPopover({ anchor, open, onOpenChange }) {
           <div className="grid gap-1.5">
             <Label>{__("messages.paths.deck_label")}</Label>
             <div className="flex gap-2">
-              <Input defaultValue="/apresentacao" />
+              <Input defaultValue={deckRoot} />
               <Button variant="secondary" size="sm">{__("messages.paths.choose")}</Button>
             </div>
           </div>
           <div className="grid gap-1.5">
             <Label>{__("messages.paths.templates_label")}</Label>
             <div className="flex gap-2">
-              <Input defaultValue="/modelos" />
+              <Input defaultValue={templateRoot} />
               <Button variant="secondary" size="sm">{__("messages.paths.choose")}</Button>
             </div>
           </div>
@@ -72,18 +73,23 @@ function PathsPopover({ anchor, open, onOpenChange }) {
   );
 }
 
-function Shell({
-  root,
-  setRoot,
-  slides,
-  selectedFile,
-  onSelect,
-  selectedLabel,
-  dirty,
-  status,
-  statusTone,
-  onSave,
-}) {
+function Shell() {
+  const {
+    root,
+    setRoot,
+    slides,
+    selectedFile,
+    selectFile,
+    dirty,
+    statusKey,
+    statusTone,
+    selectedLabel,
+    save,
+    reload,
+    preview,
+    deckRoot,
+    templateRoot,
+  } = useEditor();
   const { sidebarCollapsed, setSidebarCollapsed, inspectorCollapsed, setInspectorCollapsed } =
     useEditorPanels();
   const isLg = useMediaQuery("(min-width: 1024px)");
@@ -114,8 +120,8 @@ function Shell({
       <Topbar
         root={root}
         setRoot={setRoot}
-        deckPath="/apresentacao"
-        templatePath="/modelos"
+        deckPath={deckRoot}
+        templatePath={templateRoot}
         selectedFile={selectedFile}
         unsaved={dirty}
         sidebarInline={sidebarInline}
@@ -126,6 +132,9 @@ function Shell({
         onOpenInspectorSheet={() => setInspectorSheet(true)}
         onOpenHelp={() => setHelpOpen(true)}
         onOpenPaths={() => setPathsOpen(true)}
+        onSave={save}
+        onReload={reload}
+        onPreview={preview}
       />
 
       <div className={`grid min-h-0 gap-2 ${gridCols}`}>
@@ -134,26 +143,19 @@ function Shell({
             <LeftPanel
               slides={slides}
               selectedFile={selectedFile}
-              onSelect={onSelect}
+              onSelect={selectFile}
               count={slides.length}
             />
           </aside>
         )}
 
         <main className="relative col-start-1 min-h-0 lg:col-start-auto">
-          <Workspace
-            selectedFile={selectedFile}
-            selectedLabel={selectedLabel}
-            dirty={dirty}
-            status={status}
-            statusTone={statusTone}
-            onSave={onSave}
-          />
+          <Workspace />
         </main>
 
         {inspectorInline && (
           <aside className="hidden min-h-0 lg:block">
-            <Inspector selectedLabel={selectedLabel} />
+            <Inspector />
           </aside>
         )}
       </div>
@@ -161,6 +163,8 @@ function Shell({
       <PathsPopover
         open={pathsOpen}
         onOpenChange={setPathsOpen}
+        deckRoot={deckRoot}
+        templateRoot={templateRoot}
         anchor={
           <button className="hidden" aria-hidden tabIndex={-1} />
         }
@@ -176,7 +180,7 @@ function Shell({
               slides={slides}
               selectedFile={selectedFile}
               onSelect={(f) => {
-                onSelect(f);
+                selectFile(f);
                 setSidebarSheet(false);
               }}
               count={slides.length}
@@ -191,7 +195,7 @@ function Shell({
             <SheetTitle>{__("messages.inspector.tab_props")}</SheetTitle>
           </SheetHeader>
           <div className="min-h-0 flex-1 p-4 pt-0">
-            <Inspector selectedLabel={selectedLabel} />
+            <Inspector />
           </div>
         </SheetContent>
       </Sheet>
@@ -201,10 +205,10 @@ function Shell({
   );
 }
 
-export default function AppShell(props) {
+export default function AppShell() {
   return (
     <EditorPanelsProvider>
-      <Shell {...props} />
+      <Shell />
     </EditorPanelsProvider>
   );
 }

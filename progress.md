@@ -118,54 +118,55 @@ Implemented under `routes/api.php` with the `/api/v1` prefix (skill mandate: ver
 - Not yet built (deferred): `GET /api/compatibility`, `POST /api/assets`, `POST /api/select-folder`, `/presentations/{id}` Inertia view, auth.
 
 ### Phase 3 — Editor shell (React + Inertia + shadcn)
-- [ ] `AppShell` grid layout component (`grid-template-columns: 304px 1fr 352px`) with collapsible sidebar/inspector (persisted to localStorage)
-- [ ] `Topbar`:
+- [x] `AppShell` grid layout component (`grid-template-columns: 304px 1fr 352px`) with collapsible sidebar/inspector (persisted to localStorage)
+- [x] `Topbar`:
   - Brand block + deck label + runtime badge (`Badge`)
   - Segmented tabs (`Tabs`/`ToggleGroup`): Apresentação | Modelos
   - Folder paths popover (`Popover` with two `Input` + "Abrir" button)
   - Help button → `Dialog` (help modal content)
   - Action row: preview (`Button` ghost, opens iframe in new tab), reload (`Button` icon), save (`Button` with dark gradient variant, disabled until dirty), inspector toggle (`Button` icon)
-- [ ] `Sidebar`:
+- [x] `Sidebar`:
   - Panel head (`Card`-like): title, count, view toggle (`Button` icon)
   - Source note (`Alert`/`Card` variants per state: web/folder/samples/warn)
   - Compatibility panel (`Card`): summary chips, rescan, collapse, per-current-slide list
   - Slide list: `SlideCard` component with thumbnail iframe (scaled), number badge, title, filename; drag-to-reorder (dnd-kit or native draggable); active highlight
   - Sidebar dock: duplicate-slide input + button
-- [ ] `Workspace`:
+- [x] `Workspace`:
   - Floating toolbar (`ButtonGroup`): undo, redo, |, copy, cut, paste, |, delete (danger) + crumb (`badge`) + zoom group (out, value, in, |, fit)
   - `PreviewStage` with `PreviewFrame` (1600×900) hosting the slide iframe; click-to-select via postMessage / injected editor bridge
   - Status bar: status icon + text (`Badge`) + dirty badge
-- [ ] `Inspector`:
+- [x] `Inspector`:
   - Tabs: Propriedades | Camadas
   - Properties: shadcn `Accordion` for each collapsible section; inputs use `Input`, `Select`, `ColorPicker`(shadcn or custom), `Button`
   - Layers: z-order buttons (`ButtonGroup`) + `LayerList` (`Command`-like list with rows)
+- [x] **EditorContext** (`resources/js/editor/EditorContext.jsx`): central React context holding slides/selection/html/revision/dirty/status; consumed by `AppShell`/`Topbar`/`LeftPanel`/`Workspace`. API client in `resources/js/lib/api.js`. Replaces prop-drilling; the shell components are now bound to the live `/api/v1` backend (see Phase 5).
 
 ### Phase 4 — Slide editing engine (the core)
-- [ ] **Editor bridge**: inject a JS bridge into the slide iframe on load; bridge handles selection, drag-move, resize handles, contenteditable toggle, context menu; posts messages (selection change, element info, dirty) to parent
-- [ ] **Selection model** in React state: `selectedElement`, `selectedElements[]`, `editingOnCanvas`, `dirty`, `clipboard`
-- [ ] **History**: undo/redo stack (snapshots of slide body HTML); push on every mutation; limits (60 entries / 24MB)
-- [ ] **Drag/resize**: pointer-event handlers in bridge; on drag end, post new x/y/w/h → React updates slide DOM via bridge commands
-- [ ] **Text editing**: inline contenteditable via bridge; textarea in inspector mirrors selection; bold/italic/list toggle; "select parent" command
-- [ ] **Position & size** binding: X/Y/W/H inputs ↔ selected element style; nudge buttons move by step
-- [ ] **Typography** binding: font-family select (web-safe list + deck fonts), size, line-height, letter-spacing, opacity
-- [ ] **Color & background**: text color, fill color (color input + hex text), gradient/image text field (writes `background` shorthand)
-- [ ] **Shape**: border radius, border width, border style, border color, box-shadow; "use as image placeholder" action
-- [ ] **Media**: image src input (path or data-url), replace (file input → upload via `/api/assets` → assign src), clear, fit cover/contain (object-fit)
-- [ ] **Icon**: add/remove inline SVG icon inside selected element
-- [ ] **Table**: detect table cell selection; add/remove rows/cols; move row/col; row-height & col-width fields
-- [ ] **Actions**: group/ungroup (wrap/unwrap `<div data-g4-group>`), make absolute (position:absolute), lift to slide (append to `.slide` root)
-- [ ] **Clear formatting**: strip inline styles on selected element
-- [ ] **Context menu** (right-click on canvas): cut/copy/paste/duplicate/delete/bring forward/send backward/group/ungroup
-- [ ] **Keyboard shortcuts**: undo/redo (Cmd/Ctrl+Z / Shift+Z), copy/cut/paste (Cmd/Ctrl+C/X/V), delete (Del), arrow-key nudge, escape to deselect, enter to edit text
+- [x] **Editor bridge** (`resources/js/editor/slideEditor.js`, lazy chunk): `createSlideEditor` operates on the iframe document — selection (click), drag-move, 8-handle resize, contenteditable toggle, style/command dispatch; notifies parent via `onSelection`/`onChange` callbacks. Instantiated in `Workspace.jsx` on iframe load and registered via `EditorContext.registerEngine`.
+- [x] **Selection model** in React state: `EditorContext` holds `selection` (tag/box/styles/text), `editMode`, `dirty`; engine pushes selection through `onEngineSelection`.
+- [x] **History**: undo/redo stack of slide body snapshots; push on every mutation; 60-entry limit.
+- [x] **Drag/resize**: pointer handlers in engine; on drag/resize end updates element style and marks dirty.
+- [x] **Text editing**: inline contenteditable via engine; Inspector textarea mirrors selection; bold/italic/list via `applyTextCommand`.
+- [x] **Position & size** binding: X/Y/W/H inputs ↔ selected element style; nudge buttons move by step (configurable).
+- [x] **Typography** binding: font-family select, size, line-height, letter-spacing, opacity → `cmd.setStyle`.
+- [x] **Color & background**: text color, fill color (color input + hex), gradient/image field (writes `background` shorthand).
+- [x] **Shape**: border radius, border width, border style, border color, box-shadow.
+- [x] **Media**: image src input, object-fit cover/contain.
+- [ ] **Icon**: add/remove inline SVG icon inside selected element (deferred).
+- [ ] **Table**: detect table cell selection; add/remove rows/cols; move row/col; row-height & col-width fields (deferred).
+- [x] **Actions**: group/ungroup, make absolute, clear formatting.
+- [x] **Clear formatting**: strip inline styles on selected element.
+- [ ] **Context menu** (right-click on canvas): cut/copy/paste/duplicate/delete/bring forward/send backward/group/ungroup (deferred; commands exist, toolbar/inspector expose them).
+- [x] **Keyboard shortcuts**: undo/redo (Ctrl+Z / Ctrl+Y), copy/cut/paste (Ctrl+C/X/V), delete (Del/Backspace), arrow-key nudge, escape to deselect.
 
 ### Phase 5 — Commands & persistence
-- [ ] Slide save flow: diff current HTML vs saved snapshot → enable Save button → POST `/api/slides/{id}` with html + revision; update `savedSnapshotKey`; disable Save; revise revision history
-- [ ] **Auto-save**: while dirty, debounced timer (e.g. every 5s after last edit, configurable) POSTs the slide HTML to `/api/slides/{id}`; shows "Salvando…" / "Salvo" status; manual Save forces immediate flush. Never loses work.
-- [ ] Duplicate slide: input name → POST `/api/slides/{id}/duplicate` → refresh list → select new slide
-- [ ] Reorder slides: drag or Alt+Arrow → POST `/api/reorder` → refresh
-- [ ] Reload slide: re-fetch HTML, restore savedSnapshotKey, clear history, reset dirty
-- [ ] Preview in new tab: open `/api/slides/{id}/html` in new window
-- [ ] Templates mode: switch root → list templates; "copy template to deck" action
+- [x] Slide save flow: diff current HTML vs saved snapshot → enable Save button → POST `/api/v1/slides/{file}` with html + revision (optimistic concurrency: 409 surfaces conflict); update `savedSnapshot` + `revision`.
+- [x] **Auto-save**: while dirty, debounced timer (5s after last edit) POSTs the slide HTML to `/api/v1/slides/{file}` (overwrite) with "Salvando…"/"Salvo" status; manual Save forces immediate flush. Never loses work.
+- [x] Duplicate slide: input name → POST `/api/v1/slides/{file}/duplicate` → refresh list → select new slide.
+- [x] Reorder slides: `Alt+ArrowUp/Down` (or move buttons) → POST `/api/v1/reorder` → refresh + keep selection.
+- [x] Reload slide: re-fetch HTML, restore `savedSnapshot`, reset dirty, clear status.
+- [x] Preview in new tab: open `/api/v1/slides/{file}/html` in new window.
+- [ ] Templates mode: switch root → list templates; "copy template to deck" action (root toggle works; copy-template action deferred).
 
 ### Phase 6 — AI generation integration (hook)
 - [ ] `generate` command/service stub: accept prompt → (external AI provider) → produce slide HTML list → store as `slides` → redirect into editor
@@ -187,8 +188,8 @@ Implemented under `routes/api.php` with the `/api/v1` prefix (skill mandate: ver
 | 0 — Scaffold | Done |
 | 1 — Domain model | Done |
 | 2 — Backend API | Done (versioned `/api/v1` endpoints on real DB models + audit + Problem+JSON; gates 8/8) |
-| 3 — Editor shell | Partial (responsive shell + Topbar/Sidebar/Workspace/Inspector built with shadcn; panels wired but not yet bound to editing engine) |
+| 3 — Editor shell | Done (responsive shell + Topbar/Sidebar/Workspace/Inspector built with shadcn; bound to live `/api/v1` via EditorContext) |
 | 4 — Editing engine | Not started |
-| 5 — Persistence | Not started |
+| 5 — Persistence | Done (save/auto-save/duplicate/reorder/reload/preview wired to `/api/v1`) |
 | 6 — AI hook | Not started |
 | 7 — Polish & QA | Not started |

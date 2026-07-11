@@ -9,6 +9,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
 
+/**
+ * @property int $id
+ * @property int $presentation_id
+ * @property int $position
+ * @property string $filename
+ * @property string|null $title
+ * @property string|null $html
+ * @property SourceMode $source_mode
+ * @property string|null $revision
+ */
 final class Slide extends Model
 {
     protected $fillable = [

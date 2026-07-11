@@ -6,6 +6,16 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property int $id
+ * @property int|null $user_id
+ * @property string $title
+ * @property string $slug
+ * @property string $deck_path
+ * @property string $template_path
+ * @property array<string, mixed> $settings
+ * @property int $position
+ */
 final class Presentation extends Model
 {
     protected $fillable = [

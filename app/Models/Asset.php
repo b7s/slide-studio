@@ -5,6 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property int $id
+ * @property int $presentation_id
+ * @property string $path
+ * @property string $mime
+ * @property string $data
+ */
 final class Asset extends Model
 {
     protected $fillable = [

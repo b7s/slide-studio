@@ -5,6 +5,7 @@ import { createInertiaApp, usePage } from "@inertiajs/react";
 import { TooltipProvider } from "./Components/ui/tooltip";
 import { Toaster } from "./Components/ui/sonner";
 import { setTranslations } from "./lib/i18n";
+import { setRoutes } from "./lib/routes";
 
 function I18nSync() {
   const { props } = usePage();
@@ -12,7 +13,10 @@ function I18nSync() {
     if (props.translations) {
       setTranslations(props.translations);
     }
-  }, [props.translations]);
+    if (props.routes) {
+      setRoutes(props.routes);
+    }
+  }, [props.translations, props.routes]);
   return null;
 }
 
@@ -25,6 +29,9 @@ createInertiaApp({
     const page = props.initialPage;
     if (page?.props?.translations) {
       setTranslations(page.props.translations);
+    }
+    if (page?.props?.routes) {
+      setRoutes(page.props.routes);
     }
 
     createRoot(el).render(

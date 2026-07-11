@@ -17,8 +17,8 @@ final class EditorController extends Controller
         return Inertia::render('Editor/Index', [
             'config' => [
                 'mode' => 'local',
-                'deckRoot' => $presentation->deck_path ?? '/apresentacao',
-                'templateRoot' => $presentation->template_path ?? '/modelos',
+                'deckRoot' => $presentation->deck_path ?? '/presentation',
+                'templateRoot' => $presentation->template_path ?? '/templates',
                 'deckAvailable' => true,
                 'templatesAvailable' => true,
             ],
@@ -27,6 +27,7 @@ final class EditorController extends Controller
                 'title' => $slide->title,
                 'number' => (string) $slide->position,
             ])->values()->all(),
+            'presentationId' => $presentation->id,
             'selectedFile' => $slides->first()?->filename,
         ]);
     }

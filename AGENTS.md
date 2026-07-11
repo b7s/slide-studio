@@ -76,6 +76,23 @@ For every backend change, apply the skill's patterns. Summary of the mandatory r
 - **Frontend (React/Inertia):** UI strings are NOT hardcoded in `.jsx`. They are sourced from the `lang/pt_BR` files and exposed to the client (Inertia shared prop and/or a translation module that mirrors `lang/`), then read through a client `__()` wrapper. Do not introduce raw Portuguese/English literals into components.
 - Keep keys namespaced by surface (`messages.*`, `validation.*`, `editor.*`, `inspector.*`, etc.). Add new keys to `lang/pt_BR`; provide `en` equivalents in `lang/en` for any key that needs an English fallback.
 
+### 8. Database queries — always use `Model::query()` (mandatory)
+- Never call static query proxies like `Model::where(...)`, `Model::all()`, or `Model::find(...)` directly. **Always start from `Model::query()`**: `Slide::query()->where('filename', $file)->firstOrFail()`. This keeps queries explicit and uniform, composes cleanly with scopes/eager loads, and is consistent across the codebase (works with `nunomaduro/essentials` strict defaults).
+- The only exceptions are Eloquent's identity helpers that are inherently safe and self-documenting: `Model::findOrFail($id)`, `Model::create([...])`, `Model::make(...)`, and the model instance methods (`$model->save()`, `$model->update([...])`, `$model->delete()`).
+
+### 9. Model doc blocks — declare `@property` (mandatory)
+- Every Eloquent model MUST carry a class-level PHPDoc `@property` block enumerating **all** persisted columns and non-trivial attributes (enum casts, JSON casts, dates), typed to their PHP type. This gives PHPStan/static analysis and `JsonResource` access to Eloquent's dynamic properties and is required under `nunomaduro/essentials` strict models (accessing an undefined attribute throws).
+- Keep the list in sync with `$fillable`/migrations whenever columns change. Example:
+  ```php
+  /**
+   * @property int $id
+   * @property string $filename
+   * @property \App\Enums\Slide\SourceMode $source_mode
+   * @property string|null $revision
+   */
+  final class Slide extends Model { ... }
+  ```
+
 ### Quality gates (run after every backend change)
 ```
 ./vendor/bin/pest --parallel

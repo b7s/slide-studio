@@ -9,6 +9,13 @@ class HandleInertiaRequests extends Middleware
 {
     protected $rootView = 'app';
 
+    /**
+     * Placeholder token swapped client-side for a slide filename. Keeps URL
+     * construction on the server (named routes) while letting the client
+     * inject the dynamic segment without hardcoding the path.
+     */
+    private const SLIDE_TOKEN = '__FILE__';
+
     public function version(Request $request): ?string
     {
         return parent::version($request);
@@ -19,10 +26,31 @@ class HandleInertiaRequests extends Middleware
         return array_merge(parent::share($request), [
             'locale' => app()->getLocale(),
             'translations' => $this->translations(app()->getLocale()),
+            'routes' => $this->routes(),
             'auth' => [
                 'user' => $request->user(),
             ],
         ]);
+    }
+
+    /**
+     * Named-route URLs exposed to the client so no endpoint is hardcoded in
+     * JS. Slide routes carry a placeholder token (see SLIDE_TOKEN) that the
+     * client replaces with the encoded filename.
+     *
+     * @return array<string, string>
+     */
+    private function routes(): array
+    {
+        return [
+            'config' => route('api.v1.config', absolute: false),
+            'slidesIndex' => route('api.v1.slides.index', absolute: false),
+            'slidesHtml' => route('api.v1.slides.html', absolute: false),
+            'slideSave' => route('api.v1.slides.save', ['slide' => self::SLIDE_TOKEN], false),
+            'slideDuplicate' => route('api.v1.slides.duplicate', ['slide' => self::SLIDE_TOKEN], false),
+            'reorder' => route('api.v1.reorder', absolute: false),
+            'slideToken' => self::SLIDE_TOKEN,
+        ];
     }
 
     /**
