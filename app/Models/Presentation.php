@@ -15,6 +15,7 @@ final class Presentation extends Model
         'deck_path',
         'template_path',
         'settings',
+        'position',
     ];
 
     protected $casts = [
