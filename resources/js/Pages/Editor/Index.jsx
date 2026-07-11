@@ -1,7 +1,7 @@
 import AppShell from "../../editor/AppShell";
 import { EditorProvider } from "../../editor/EditorContext";
 
-export default function Index({ config, slides, presentationId, presentationSlug, selectedFile }) {
+export default function Index({ config, slides, presentationId, presentationSlug, selectedFile, permissions }) {
   return (
     <EditorProvider
       config={config}
@@ -9,6 +9,7 @@ export default function Index({ config, slides, presentationId, presentationSlug
       presentationId={presentationId}
       presentationSlug={presentationSlug}
       initialFile={selectedFile}
+      permissions={permissions}
     >
       <AppShell />
     </EditorProvider>

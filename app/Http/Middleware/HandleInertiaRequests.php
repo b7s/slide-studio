@@ -21,6 +21,8 @@ class HandleInertiaRequests extends Middleware
 
     private const string GENERATION_TOKEN = '__GENERATION__';
 
+    private const string USER_TOKEN = '__USER__';
+
     public function version(Request $request): ?string
     {
         return parent::version($request);
@@ -56,9 +58,14 @@ class HandleInertiaRequests extends Middleware
             'reorder' => route('api.v1.reorder', absolute: false),
             'generate' => route('api.v1.generate', ['presentation' => self::PRESENTATION_TOKEN], false),
             'generationShow' => route('api.v1.generation.show', ['generation' => self::GENERATION_TOKEN], false),
+            'sharesIndex' => route('api.v1.shares.index', ['presentation' => self::PRESENTATION_TOKEN], false),
+            'sharesUpdate' => route('api.v1.shares.update', ['presentation' => self::PRESENTATION_TOKEN, 'user' => self::USER_TOKEN], false),
+            'sharesDestroy' => route('api.v1.shares.destroy', ['presentation' => self::PRESENTATION_TOKEN, 'user' => self::USER_TOKEN], false),
+            'usersSearch' => route('api.v1.users.search', absolute: false),
             'slideToken' => self::SLIDE_TOKEN,
             'presentationToken' => self::PRESENTATION_TOKEN,
             'generationToken' => self::GENERATION_TOKEN,
+            'userToken' => self::USER_TOKEN,
         ];
     }
 

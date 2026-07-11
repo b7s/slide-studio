@@ -9,6 +9,7 @@ use App\Jobs\Generation\GenerateSlides;
 use App\Models\Generation;
 use App\Models\Presentation;
 use App\Models\Slide;
+use App\Models\Team;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
@@ -19,9 +20,19 @@ uses(RefreshDatabase::class);
 function makePresentation(string $slug = 'demo-x'): Presentation
 {
     $user = User::factory()->create();
+    $team = Team::create([
+        'user_id' => $user->id,
+        'name' => 'Test Team',
+        'personal' => true,
+    ]);
+    $team->members()->attach($user, ['role' => 'admin']);
+    $user->update(['current_team_id' => $team->id]);
+
+    test()->actingAs($user);
 
     return Presentation::create([
         'user_id' => $user->id,
+        'team_id' => $team->id,
         'title' => 'Demo',
         'slug' => $slug,
         'deck_path' => '/presentation',

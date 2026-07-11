@@ -4,6 +4,7 @@ use App\Enums\Slide\SourceMode;
 use App\Models\AuditLog;
 use App\Models\Presentation;
 use App\Models\Slide;
+use App\Models\Team;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -12,9 +13,17 @@ uses(RefreshDatabase::class);
 function seedPresentation(): Presentation
 {
     $user = User::factory()->create();
+    $team = Team::create([
+        'user_id' => $user->id,
+        'name' => 'Test Team',
+        'personal' => true,
+    ]);
+    $team->members()->attach($user, ['role' => 'admin']);
+    $user->update(['current_team_id' => $team->id]);
 
     $presentation = Presentation::create([
         'user_id' => $user->id,
+        'team_id' => $team->id,
         'title' => 'Demo',
         'slug' => 'demo-'.uniqid(),
         'deck_path' => '/presentation',
@@ -24,10 +33,13 @@ function seedPresentation(): Presentation
     Slide::create(['presentation_id' => $presentation->id, 'filename' => '01-a.html', 'title' => 'A', 'position' => 1, 'source_mode' => SourceMode::Deck]);
     Slide::create(['presentation_id' => $presentation->id, 'filename' => '02-b.html', 'title' => 'B', 'position' => 2, 'source_mode' => SourceMode::Deck]);
 
+    test()->actingAs($user);
+
     return $presentation;
 }
 
 test('every api response carries an X-Request-ID header', function () {
+    $this->actingAs(User::factory()->create());
     $response = $this->getJson('/api/v1/config');
 
     $response->assertOk();
@@ -35,6 +47,7 @@ test('every api response carries an X-Request-ID header', function () {
 });
 
 test('GET /api/v1/config returns editor config', function () {
+    $this->actingAs(User::factory()->create());
     $this->getJson('/api/v1/config')
         ->assertOk()
         ->assertJsonStructure(['mode', 'deckRoot', 'templateRoot', 'deckAvailable', 'templatesAvailable']);

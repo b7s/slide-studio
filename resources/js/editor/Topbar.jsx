@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { router, usePage } from "@inertiajs/react";
 import { Button } from "../Components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "../Components/ui/tabs";
 import { Badge } from "../Components/ui/badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "../Components/ui/tooltip";
 import { GenerateDialog } from "./GenerateDialog";
+import { ShareDialog } from "./ShareDialog";
 import {
   PanelLeft,
   FolderOpen,
@@ -14,6 +16,7 @@ import {
   ArrowDownToLine,
   SlidersHorizontal,
   Sparkles,
+  Share2,
 } from "lucide-react";
 import { useEditorPanels } from "./EditorPanelsContext";
 import { useEditor } from "./EditorContext";
@@ -47,9 +50,12 @@ export default function Topbar({
   onReload,
   onPreview,
 }) {
-  const { dirty, save, reload, preview, generate } = useEditor();
+  const { dirty, save, reload, preview, generate, presentationSlug, permissions } = useEditor();
   const effectiveDirty = unsaved ?? dirty;
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const canShare = permissions?.canShare ?? false;
+  const readOnly = !(permissions?.canEdit ?? false);
 
   return (
     <header className="z-30 col-span-full flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2.5 shadow-[0_1px_2px_rgba(23,35,45,0.05),0_18px_42px_-34px_rgba(23,35,45,0.32)] sm:px-4">
@@ -85,6 +91,11 @@ export default function Topbar({
             </p>
           </div>
           <Badge>{__("messages.topbar.local_badge")}</Badge>
+          {readOnly && (
+            <Badge variant="danger">
+              {__("messages.sharing.readonly_mode")}
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -99,8 +110,13 @@ export default function Topbar({
 
       <div className="flex items-center gap-1.5">
         <IconTip label={__("messages.ai.generate")}>
-          <Button variant="ghost" size="icon" aria-label={__("messages.ai.generate")} onClick={() => setGenerateOpen(true)}>
+          <Button variant="ghost" size="icon" aria-label={__("messages.ai.generate")} onClick={() => setGenerateOpen(true)} disabled={!permissions?.canEdit}>
             <Sparkles />
+          </Button>
+        </IconTip>
+        <IconTip label={__("messages.sharing.title")}>
+          <Button variant="ghost" size="icon" aria-label={__("messages.sharing.title")} onClick={() => setShareOpen(true)}>
+            <Share2 />
           </Button>
         </IconTip>
         <IconTip label={__("messages.topbar.folders")}>
@@ -124,7 +140,7 @@ export default function Topbar({
           </Button>
         </IconTip>
         <IconTip label={__("messages.topbar.save_html")}>
-          <Button variant="save" disabled={!effectiveDirty} className="gap-1.5" onClick={onSave ?? save}>
+          <Button variant="save" disabled={!effectiveDirty || !permissions?.canEdit} className="gap-1.5" onClick={onSave ?? save}>
             <Code2 className="hidden sm:block" />
             <span className="hidden sm:inline">{__("messages.topbar.save_changes")}</span>
             <ArrowDownToLine className="sm:hidden" />
@@ -144,6 +160,7 @@ export default function Topbar({
             </Button>
           </IconTip>
         )}
+        <UserMenu />
       </div>
 
       <GenerateDialog
@@ -151,6 +168,56 @@ export default function Topbar({
         onClose={() => setGenerateOpen(false)}
         onGenerate={generate}
       />
+      <ShareDialog
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        presentationSlug={presentationSlug}
+        canShare={canShare}
+      />
     </header>
+  );
+}
+
+function UserMenu() {
+  const user = usePage().props.auth?.user;
+  const initials = user?.name
+    ? user.name.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase()
+    : "?";
+  const handleLogout = (e) => {
+    e.preventDefault();
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/logout";
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute("content");
+    if (csrf) {
+      const tokenInput = document.createElement("input");
+      tokenInput.type = "hidden";
+      tokenInput.name = "_token";
+      tokenInput.value = csrf;
+      form.appendChild(tokenInput);
+    }
+    document.body.appendChild(form);
+    form.submit();
+  };
+
+  return (
+    <div className="relative flex items-center gap-2 pl-2 border-l border-[var(--border)] ml-1">
+      <div
+        className="grid size-7 place-items-center rounded-full bg-gradient-to-br from-[var(--gold)] to-[color-mix(in_srgb,var(--gold)_60%,white)] text-[10px] font-bold text-white"
+        aria-hidden
+      >
+        {initials}
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={handleLogout}
+        className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+        aria-label={user?.name ? `${user.name} — ${__("messages.auth.logout")}` : __("messages.auth.logout")}
+      >
+        <span className="hidden sm:inline">{__("messages.auth.logout")}</span>
+        <span className="sm:hidden">⎋</span>
+      </Button>
+    </div>
   );
 }

@@ -21,6 +21,7 @@ export function EditorProvider({
   presentationId = null,
   presentationSlug = null,
   initialFile = null,
+  permissions = { role: "viewer", canEdit: false, canShare: false, canDelete: false },
 }) {
   const [root, setRoot] = useState("deck");
   const deckRoot = config.deckRoot ?? "";
@@ -93,6 +94,7 @@ export function EditorProvider({
   const save = useCallback(async (overwrite = false) => {
     const file = selectedFileRef.current;
     if (!file) return;
+    if (!permissions?.canEdit) return;
     const body = htmlRef.current;
     setStatusKey("messages.editor.saving");
     setStatusTone("loading");
@@ -259,7 +261,7 @@ export function EditorProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const dirty = html !== "" && html !== savedSnapshot;
+  const dirty = permissions?.canEdit && html !== "" && html !== savedSnapshot;
 
   // Surface definitive outcomes (and failures) as toasts. Transient states such
   // as "saving" / "auto-saving" stay in the status bar only.
@@ -275,9 +277,10 @@ export function EditorProvider({
     else if (tone === "error") toast.error(message);
   }, [statusKey, statusTone]);
 
-  // Debounced auto-save while dirty.
+  // Debounced auto-save while dirty (skipped for read-only viewers).
   useEffect(() => {
     if (!dirty) return undefined;
+    if (!permissions?.canEdit) return undefined;
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     setStatusKey("messages.editor.autosave_pending");
     setStatusTone("loading");
@@ -288,7 +291,7 @@ export function EditorProvider({
       if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [html, dirty]);
+  }, [html, dirty, permissions?.canEdit]);
 
   const value = useMemo(
     () => ({
@@ -313,6 +316,7 @@ export function EditorProvider({
       generate,
       presentationId,
       presentationSlug,
+      permissions,
       deckRoot,
       templateRoot,
       selection,
@@ -340,6 +344,7 @@ export function EditorProvider({
       generate,
       presentationId,
       presentationSlug,
+      permissions,
       deckRoot,
       templateRoot,
       selection,

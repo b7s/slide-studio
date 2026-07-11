@@ -193,9 +193,24 @@ Implemented under `routes/api.php` with the `/api/v1` prefix (skill mandate: ver
 |-------|--------|
 | 0 — Scaffold | Done |
 | 1 — Domain model | Done |
-| 2 — Backend API | Done (versioned `/api/v1` endpoints on real DB models + audit + Problem+JSON; gates 8/8) |
-| 3 — Editor shell | Done (responsive shell + Topbar/Sidebar/Workspace/Inspector built with shadcn; bound to live `/api/v1` via EditorContext) |
-| 4 — Editing engine | Not started |
-| 5 — Persistence | Done (save/auto-save/duplicate/reorder/reload/preview wired to `/api/v1`) |
-| 6 — AI hook | Not started |
-| 7 — Polish & QA | Not started |
+| 2 — Backend API | Done (versioned `/api/v1` + audit + Problem+JSON; gates 8/8) |
+| 3 — Editor shell | Done (responsive Topbar/Sidebar/Workspace/Inspector bound to live `/api/v1`) |
+| 4 — Editing engine | Done (iframe engine: selection/drag/resize/inline text/commands/history/keyboard) — icon/table/context-menu sub-features deferred |
+| 5 — Persistence | Done (manual save + 5s auto-save + duplicate + reorder + reload + preview) — templates-copy deferred |
+| 6 — AI hook | Done (`laravel/ai` + structured `SlideDeckGenerator` + state-machine `Generation` + provider failover + frontend `GenerateDialog`); editor auth wall deferred |
+| 7 — Polish & QA | Done (Sonner toasts, a11y labels + focus-visible rings, Safari-compat banner, localized strings); dark mode + responsive visual tests deferred |
+| **8 — Auth + Teams + Sharing** | **Done** (Fortify auth + Inertia pages, teams with `current_team_id`, `presentation_user` pivot with owner/editor/viewer, sharing API, share modal, read-only enforcement, user menu, 41 Pest tests green; catraca 7/8 — only remaining finding is upstream `aws/aws-sdk-php` freshness) |
+
+### Phase 8 — Auth, teams & role-based sharing (done)
+- [x] **Auth foundation**: installed Fortify; Inertia auth pages `Pages/Auth/Login.jsx` + `Pages/Auth/Register.jsx` (`fortify.loginView`/`registerView`); login/register/logout/password-reset endpoints; localized via `messages.auth.*` (pt_BR + en).
+- [x] **Teams bounded context** (laravel-statecraft): `Team` + `TeamUser` (auto-slug, `personal` flag, `autoCreate`), users gain `current_team_id` + `ownedTeams`/`teams` relations; `CreateNewUser` action creates a personal team + attaches the user as admin + sets `current_team_id` on signup.
+- [x] **Presentation ownership**: `presentations.team_id` FK + `users.current_team_id` migration; editor controller scopes by team (`team_id === current_team_id`) or via shared presentations; `Presentation` model has `team()` belongsTo + `sharedUsers()` belongsToMany using `PresentationUser::class`.
+- [x] **Sharing bounded context**: `PresentationUser` pivot with `role` cast to `App\Enums\Sharing\PresentationRole` (Owner | Editor | Viewer) + `shared_by` audit field + PK composite; only owners can re-share; `SharePresentation` action (with audit) and `RemoveUserFromPresentation` action transactional; presenters list in `SharesController`.
+- [x] **Authorization**: `App\Policies\PresentationPolicy` (view/edit/share/delete based on role) auto-discovered by Laravel; gating uses `Gate::authorize('view'|'share', $presentation)` in `SharingController`; `PresentationRole::forUserOn($user, $presentation)` resolves the role for owner/pivot rows in one place.
+- [x] **Sharing API**: `GET /api/v1/presentations/{presentation}/shares` (list), `PUT /api/v1/presentations/{presentation}/shares/{user}` (set role — owner-only), `DELETE …` (owner-only), `GET /api/v1/users/search?q=` (search within the active team); all endpoints report RFC 9457 Problem+JSON errors and carry `X-Request-ID`.
+- [x] **Frontend Share modal**: `resources/js/editor/ShareDialog.jsx` opened from a new Topbar `Share2` icon button; team-user search (debounced) + role select (owner/editor/viewer); existing shares list with inline role change + remove; localized via `messages.sharing.*`.
+- [x] **Read-only mode**: `permissions.canEdit` flag is forwarded from `Editor/Index` Inertia page → `EditorProvider` → `EditorContext`: dirty guards on viewer (no auto-save), `Save`/`Generate` buttons disabled in Topbar, plus a "Modo leitura" / "View only" badge shown next to the runtime badge.
+- [x] **User menu + logout**: top-right `UserMenu` (avatar initials + `messages.auth.logout`) POSTs to `/logout` with the CSRF token.
+- [x] **Tests**: Pest feature suites — `AuthTest` (7 tests covering guest redirect, login form, registration with team, login success/failure, logout), `SharingTest` (8 tests covering owner share, non-owner 403, change role, remove share, list shares, users-search narrowing, invalid-role 422, role helpers), `PresentationPolicyTest` (4 tests for owner/editor/viewer/stranger); existing `SlideApiTest` + `GenerationTest` updated to authenticate helpers + create teams + set `current_team_id`. 41 tests, all green.
+- [x] **Gates**: `pint` ✅, `phpstan` level 6 ✅, `pest` 41 passed / 148 assertions ✅, `npm run build` ✅. `catraca` 7/8 — `Security Audit` fails only on an upstream `aws/aws-sdk-php` freshness check (non-vulnerability, governed by composer, not by us).
+- [ ] **Cross-team sharing** (future, not in scope): `presentation_user` remains per-user + team-scoped today; cross-team would add an optional `team_id` on the pivot plus an invitation/grant flow.

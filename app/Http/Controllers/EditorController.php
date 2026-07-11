@@ -2,17 +2,34 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Sharing\PresentationRole;
 use App\Models\Presentation;
 use App\Models\Slide;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 final class EditorController extends Controller
 {
-    public function index(?Presentation $presentation = null): Response
+    public function index(Request $request, ?Presentation $presentation = null): Response
     {
-        $presentation ??= Presentation::query()->with('slides')->first();
+        $user = $request->user();
+
+        if ($presentation?->exists === true) {
+            $presentation->load('slides');
+            abort_unless($presentation->user_id === $user->id || $presentation->sharedUsers()->where('user_id', $user->id)->exists(), 403);
+        } else {
+            $presentation = Presentation::query()
+                ->where('team_id', $user->current_team_id)
+                ->orWhereHas('sharedUsers', fn ($q) => $q->where('user_id', $user->id))
+                ->with('slides')
+                ->first();
+            abort_unless($presentation !== null, 403);
+        }
+
         $slides = $presentation->slides ?? collect();
+
+        $role = PresentationRole::forUserOn($user, $presentation) ?? PresentationRole::default();
 
         return Inertia::render('Editor/Index', [
             'config' => [
@@ -30,6 +47,12 @@ final class EditorController extends Controller
             'presentationId' => $presentation->id,
             'presentationSlug' => $presentation->slug,
             'selectedFile' => $slides->first()?->filename,
+            'permissions' => [
+                'role' => $role->value,
+                'canEdit' => $role->canWrite(),
+                'canShare' => $role->canShare(),
+                'canDelete' => $role->canDelete(),
+            ],
         ]);
     }
 }

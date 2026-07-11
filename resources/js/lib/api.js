@@ -95,3 +95,34 @@ export async function generationStatus(generationId) {
   if (!res.ok) throw new Error("generation_status_failed");
   return await res.json();
 }
+
+export async function fetchShares(presentationSlug) {
+  const res = await fetch(route("sharesIndex", { presentation: presentationSlug }));
+  if (!res.ok) throw new Error("shares_fetch_failed");
+  return await res.json();
+}
+
+export async function updateShare(presentationSlug, userId, role) {
+  const res = await fetch(route("sharesUpdate", { presentation: presentationSlug, user: userId }), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ role }),
+  });
+  if (!res.ok) throw new Error("share_update_failed");
+  return await res.json();
+}
+
+export async function removeShare(presentationSlug, userId) {
+  const res = await fetch(route("sharesDestroy", { presentation: presentationSlug, user: userId }), {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error("share_remove_failed");
+  return await res.json();
+}
+
+export async function searchUsers(query) {
+  const res = await fetch(route("usersSearch", { query: { q: query } }));
+  if (!res.ok) throw new Error("users_search_failed");
+  return await res.json();
+}
