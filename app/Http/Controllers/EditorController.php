@@ -28,6 +28,7 @@ final class EditorController extends Controller
                 'number' => (string) $slide->position,
             ])->values()->all(),
             'presentationId' => $presentation->id,
+            'presentationSlug' => $presentation->slug,
             'selectedFile' => $slides->first()?->filename,
         ]);
     }

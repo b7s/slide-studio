@@ -17,6 +17,12 @@ export function route(name, params) {
     if (params.slide !== undefined) {
       url = url.split(routes.slideToken).join(encodeURIComponent(params.slide));
     }
+    if (params.presentation !== undefined) {
+      url = url.split(routes.presentationToken).join(encodeURIComponent(params.presentation));
+    }
+    if (params.generation !== undefined) {
+      url = url.split(routes.generationToken).join(encodeURIComponent(String(params.generation)));
+    }
   }
 
   if (params && params.query && typeof params.query === "object") {

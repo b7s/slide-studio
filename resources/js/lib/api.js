@@ -74,3 +74,24 @@ export async function reorderSlides(presentationId, order) {
   if (!res.ok) throw new Error("reorder_failed");
   return await res.json();
 }
+
+export async function generateSlides(presentationSlug, { prompt, maxSlides = null }) {
+  const res = await fetch(route("generate", { presentation: presentationSlug }), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(maxSlides ? { prompt, max_slides: maxSlides } : { prompt }),
+  });
+  if (!res.ok) {
+    const err = new Error("generate_failed");
+    err.code = res.status;
+    err.detail = await parseError(res);
+    throw err;
+  }
+  return await res.json();
+}
+
+export async function generationStatus(generationId) {
+  const res = await fetch(route("generationShow", { generation: generationId }));
+  if (!res.ok) throw new Error("generation_status_failed");
+  return await res.json();
+}

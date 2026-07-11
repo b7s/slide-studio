@@ -169,9 +169,14 @@ Implemented under `routes/api.php` with the `/api/v1` prefix (skill mandate: ver
 - [ ] Templates mode: switch root → list templates; "copy template to deck" action (root toggle works; copy-template action deferred).
 
 ### Phase 6 — AI generation integration (hook)
-- [ ] `generate` command/service stub: accept prompt → (external AI provider) → produce slide HTML list → store as `slides` → redirect into editor
-- [ ] The editor opens with the generated slides, user tweaks manually (the editor flow built in Phase 3–5)
-- [ ] Guard the editor with auth; per-user presentation ownership
+- [x] **Package & config**: installed `laravel/ai`; published `config/ai.php` + agent_conversations migration; added `config/slides.php` with `AI_PROVIDER` / `AI_MODEL` / `AI_FALLBACK_PROVIDER` / `AI_FALLBACK_MODEL` / `AI_MAX_SLIDES` (env + env.example) for primary + fallback providers.
+- [x] **Generation bounded context** (laravel-statecraft): `Generation` model (state machine `Pending → Processing → Completed/Failed` with `@property` doc block), `generations` migration + `slides.generation_id` FK, `GenerationStatus` enum with `default()`.
+- [x] **Agent**: `App\Ai\Agents\SlideDeckGenerator` (`HasStructuredOutput`) returns `{ title, slides: [{title, html}] }`; system prompt localized via `messages.ai.system_prompt`.
+- [x] **Orchestration**: `StartGeneration` action (DB transaction + audit + `DB::afterCommit` event) → `GenerateSlides` job (sync) calls `SlideGenerator` service (builds primary→fallback provider chain from config) → creates `Slide` rows (tagged `generation_id`, `SourceMode::Deck`) in a transaction → marks `Completed`/`Failed`.
+- [x] **API**: `POST /api/v1/presentations/{presentation}/generate` (Form Request `GenerateSlidesRequest`, slug-bound) and `GET /api/v1/generations/{generation}` status endpoint, both versioned + `X-Request-ID` middleware.
+- [x] **Frontend hook**: `GenerateDialog` (Topbar Sparkles button) → `generate(prompt, maxSlides)` in `EditorContext` → `POST` then polls `generationStatus` → refreshes slide list; localized via `messages.ai.*`. Route URLs resolved from named routes (`generate`, `generationShow`) via the Inertia `routes` prop (no hardcoded paths).
+- [x] **Tests**: Pest covers model transitions, `StartGeneration`, job→slides (agent faked), API validation + dispatch, status endpoint. 6 tests, all green.
+- [ ] Guard the editor with auth; per-user presentation ownership (deferred — app currently has no auth wall on the editor).
 
 ### Phase 7 — Polish & QA
 - [ ] Responsive breakpoints (collapse panels below 1240px / 1179px / 980px) matching reference media queries

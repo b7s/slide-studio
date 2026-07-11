@@ -10,11 +10,16 @@ class HandleInertiaRequests extends Middleware
     protected $rootView = 'app';
 
     /**
-     * Placeholder token swapped client-side for a slide filename. Keeps URL
-     * construction on the server (named routes) while letting the client
-     * inject the dynamic segment without hardcoding the path.
+     * Placeholder tokens swapped client-side for dynamic route segments. Keeps
+     * URL construction on the server (named routes) while letting the client
+     * inject dynamic segments (slide filename, presentation slug, generation id)
+     * without hardcoding any path in JS.
      */
-    private const SLIDE_TOKEN = '__FILE__';
+    private const string SLIDE_TOKEN = '__FILE__';
+
+    private const string PRESENTATION_TOKEN = '__PRESENTATION__';
+
+    private const string GENERATION_TOKEN = '__GENERATION__';
 
     public function version(Request $request): ?string
     {
@@ -49,7 +54,11 @@ class HandleInertiaRequests extends Middleware
             'slideSave' => route('api.v1.slides.save', ['slide' => self::SLIDE_TOKEN], false),
             'slideDuplicate' => route('api.v1.slides.duplicate', ['slide' => self::SLIDE_TOKEN], false),
             'reorder' => route('api.v1.reorder', absolute: false),
+            'generate' => route('api.v1.generate', ['presentation' => self::PRESENTATION_TOKEN], false),
+            'generationShow' => route('api.v1.generation.show', ['generation' => self::GENERATION_TOKEN], false),
             'slideToken' => self::SLIDE_TOKEN,
+            'presentationToken' => self::PRESENTATION_TOKEN,
+            'generationToken' => self::GENERATION_TOKEN,
         ];
     }
 

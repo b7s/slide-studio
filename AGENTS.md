@@ -93,7 +93,17 @@ For every backend change, apply the skill's patterns. Summary of the mandatory r
   final class Slide extends Model { ... }
   ```
 
-### Quality gates (run after every backend change)
+### 10. Typed class constants & route tokens (mandatory)
+- **Class/has constants MUST declare a type** (PHP 8.4 typed constants), e.g. `private const string SLIDE_TOKEN = '__FILE__';` and `private const array DEFAULTS = [...];`. This is enforced by `nunomaduro/essentials` strict checks and PHPStan level 6.
+- **No hardcoded API URLs in JS.** Server-exposed endpoints are built from Laravel **named routes** (prefixed `api.v1.*`) in `app/Http/Middleware/HandleInertiaRequests.php` (`routes()`), returned as URL strings. Dynamic segments use placeholder **tokens** (typed constants) that the client swaps:
+  ```php
+  private const string SLIDE_TOKEN = '__FILE__';
+  'slideSave' => route('api.v1.slides.save', ['slide' => self::SLIDE_TOKEN], false),
+  'slideToken' => self::SLIDE_TOKEN,
+  ```
+  The client resolver (`resources/js/lib/routes.js`) replaces `slideToken`/`presentationToken`/`generationToken` with `encodeURIComponent(params.*)`. Query strings are appended via `route(name, { query })`.
+
+
 ```
 ./vendor/bin/pest --parallel
 ./vendor/bin/catraca

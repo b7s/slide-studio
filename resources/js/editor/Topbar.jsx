@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Button } from "../Components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "../Components/ui/tabs";
 import { Badge } from "../Components/ui/badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "../Components/ui/tooltip";
+import { GenerateDialog } from "./GenerateDialog";
 import {
   PanelLeft,
   FolderOpen,
@@ -11,6 +13,7 @@ import {
   Code2,
   ArrowDownToLine,
   SlidersHorizontal,
+  Sparkles,
 } from "lucide-react";
 import { useEditorPanels } from "./EditorPanelsContext";
 import { useEditor } from "./EditorContext";
@@ -44,8 +47,9 @@ export default function Topbar({
   onReload,
   onPreview,
 }) {
-  const { dirty, save, reload, preview } = useEditor();
+  const { dirty, save, reload, preview, generate } = useEditor();
   const effectiveDirty = unsaved ?? dirty;
+  const [generateOpen, setGenerateOpen] = useState(false);
 
   return (
     <header className="z-30 col-span-full flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2.5 shadow-[0_1px_2px_rgba(23,35,45,0.05),0_18px_42px_-34px_rgba(23,35,45,0.32)] sm:px-4">
@@ -94,6 +98,11 @@ export default function Topbar({
       </div>
 
       <div className="flex items-center gap-1.5">
+        <IconTip label={__("messages.ai.generate")}>
+          <Button variant="ghost" size="icon" aria-label={__("messages.ai.generate")} onClick={() => setGenerateOpen(true)}>
+            <Sparkles />
+          </Button>
+        </IconTip>
         <IconTip label={__("messages.topbar.folders")}>
           <Button variant="ghost" size="icon" aria-label={__("messages.topbar.folders")} onClick={onOpenPaths}>
             <FolderOpen />
@@ -136,6 +145,12 @@ export default function Topbar({
           </IconTip>
         )}
       </div>
+
+      <GenerateDialog
+        open={generateOpen}
+        onClose={() => setGenerateOpen(false)}
+        onGenerate={generate}
+      />
     </header>
   );
 }

@@ -18,6 +18,7 @@ export function EditorProvider({
   config = {},
   initialSlides = [],
   presentationId = null,
+  presentationSlug = null,
   initialFile = null,
 }) {
   const [root, setRoot] = useState("deck");
@@ -46,6 +47,7 @@ export function EditorProvider({
 
   const engineRef = useRef(null);
   const presentationIdRef = useRef(presentationId);
+  const presentationSlugRef = useRef(presentationSlug);
   const autosaveTimer = useRef(null);
   const selectedFileRef = useRef(selectedFile);
   const htmlRef = useRef(html);
@@ -159,6 +161,40 @@ export function EditorProvider({
     }
   }, []);
 
+  // AI generation hook. Kicks off generation for the current presentation and
+  // polls until completion or failure, refreshing the slide list on success.
+  const generate = useCallback(
+    async (prompt, maxSlides = null) => {
+      const slug = presentationSlugRef.current;
+      if (!slug) throw new Error("editor.no_presentation");
+
+      const started = await api.generateSlides(slug, { prompt, maxSlides });
+
+      const poll = async () => {
+        const status = await api.generationStatus(started.generation_id);
+        if (status.status === "completed") {
+          await loadSlides(root);
+          setStatusKey("messages.ai.generation_done");
+          setStatusTone("success");
+          return;
+        }
+        if (status.status === "failed") {
+          setStatusKey("messages.ai.generation_failed");
+          setStatusTone("error");
+          return;
+        }
+        setTimeout(poll, 1500);
+      };
+
+      setStatusKey("messages.ai.generating");
+      setStatusTone("loading");
+      poll();
+
+      return started;
+    },
+    [loadSlides, root]
+  );
+
   const toggleEditMode = useCallback(() => setEditMode((v) => !v), []);
 
   const onHtmlChange = useCallback((nextHtml) => {
@@ -256,7 +292,9 @@ export function EditorProvider({
       reorder,
       reload,
       preview,
+      generate,
       presentationId,
+      presentationSlug,
       deckRoot,
       templateRoot,
       selection,
@@ -281,7 +319,9 @@ export function EditorProvider({
       reorder,
       reload,
       preview,
+      generate,
       presentationId,
+      presentationSlug,
       deckRoot,
       templateRoot,
       selection,

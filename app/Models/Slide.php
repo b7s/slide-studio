@@ -12,6 +12,7 @@ use Illuminate\Support\Str;
 /**
  * @property int $id
  * @property int $presentation_id
+ * @property int|null $generation_id
  * @property int $position
  * @property string $filename
  * @property string|null $title
@@ -23,6 +24,7 @@ final class Slide extends Model
 {
     protected $fillable = [
         'presentation_id',
+        'generation_id',
         'position',
         'filename',
         'title',
@@ -37,6 +39,7 @@ final class Slide extends Model
 
     protected $casts = [
         'position' => 'integer',
+        'generation_id' => 'integer',
         'source_mode' => SourceMode::class,
     ];
 
