@@ -11,6 +11,33 @@
 
 const HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 
+// Compact catalog of stroke-style SVG icons (lucide-style — `currentColor`,
+// 24×24 viewBox). Limit to icons a slide author actually reaches for: arrows,
+// navigation, common actions, sentiment. Path data is hand-curated from
+// lucide; identifiers are stable so the Inspector can round-trip names.
+const ICON_CATALOG = {
+  "chevron-up": "m18 15-6-6-6 6",
+  "chevron-down": "m6 9 6 6 6-6",
+  "chevron-left": "m15 18-6-6 6-6",
+  "chevron-right": "m9 18 6-6-6-6",
+  "arrow-up": "m5 12 7-7 7 7M12 19V5",
+  "arrow-down": "M12 5v14M19 12l-7 7-7-7",
+  "arrow-left": "M19 12H5M12 19l-7-7 7-7",
+  "arrow-right": "M5 12h14M12 5l7 7-7 7",
+  "chevrons-up": "m17 11-5-5-5 5M17 18l-5-5-5 5",
+  "chevrons-down": "m6 11 6 6 6-6M6 6l6 6 6-6",
+  "plus": "M5 12h14M12 5v14",
+  "minus": "M5 12h14",
+  "x": "M18 6 6 18M6 6l12 12",
+  "check": "M20 6 9 17l-5-5",
+  "heart": "M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z",
+  "star": "M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z",
+  "circle": "M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20z",
+  "zap": "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z",
+};
+
+export { ICON_CATALOG };
+
 function num(v) {
   const n = parseFloat(v);
   return Number.isFinite(n) ? n : 0;
@@ -90,6 +117,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
         borderColor: selected.style.borderColor,
         boxShadow: selected.style.boxShadow,
       },
+      icon: findIcon(),
       editableText: isTextEditable(selected),
     });
   }
@@ -356,6 +384,80 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     emit();
   }
 
+  // ---- icon decoration ----
+  // The current icon (if any) is the first `<svg data-g4-icon="1">` child of
+  // the selected element. The catalog is keyed by name → path data; the SVG we
+  // materialise uses an inline `<path>` with `currentColor`, so the icon
+  // inherits the element's color and stays sizeable via inline width/height.
+  function findIcon() {
+    if (!selected) return null;
+    const svg = selected.querySelector('[data-g4-icon="1"]');
+    if (!(svg instanceof Element)) return null;
+    const name = svg.getAttribute("data-icon-name") || "";
+    const w = parseFloat(svg.getAttribute("width")) || svg.clientWidth || 24;
+    const h = parseFloat(svg.getAttribute("height")) || svg.clientHeight || 24;
+    return { name, size: Math.round(w) };
+  }
+
+  function ensureIconCleared() {
+    if (!selected) return;
+    selected.querySelectorAll('[data-g4-icon="1"]').forEach((n) => n.remove());
+  }
+
+  function buildIconSvg(name) {
+    const d = ICON_CATALOG[name];
+    if (!d || !selected) return;
+    const size = findIcon()?.size ?? 24;
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("data-g4-icon", "1");
+    svg.setAttribute("data-icon-name", name);
+    svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", String(size));
+    svg.setAttribute("height", String(size));
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.style.display = "block";
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d);
+    svg.appendChild(path);
+    selected.insertBefore(svg, selected.firstChild);
+  }
+
+  function setIcon(name) {
+    if (!selected) return;
+    ensureIconCleared();
+    if (name) buildIconSvg(name);
+    pushHistory();
+    selectionInfo();
+    emit();
+  }
+
+  function removeIcon() {
+    if (!selected) return;
+    if (!findIcon()) return;
+    ensureIconCleared();
+    pushHistory();
+    selectionInfo();
+    emit();
+  }
+
+  function setIconSize(px) {
+    if (!selected) return;
+    const icon = findIcon();
+    if (!icon) return;
+    const svg = selected.querySelector('[data-g4-icon="1"]');
+    const v = Math.max(8, Math.min(512, Number(px) || 24));
+    svg.setAttribute("width", String(v));
+    svg.setAttribute("height", String(v));
+    pushHistory();
+    selectionInfo();
+    emit();
+  }
+
   function copy() {
     if (!selected) return;
     clipboard = selected.outerHTML;
@@ -474,6 +576,9 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     group,
     ungroup,
     clearFormatting,
+    setIcon,
+    removeIcon,
+    setIconSize,
     copy,
     cut,
     paste,
@@ -481,6 +586,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     undo,
     redo,
     getSelected: () => selected,
+    getIcon: findIcon,
     isEditing: () => editing,
     destroy,
   };

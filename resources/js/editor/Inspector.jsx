@@ -17,9 +17,11 @@ import {
   ChevronDown,
   ChevronsUp,
   ChevronsDown,
+  Trash2,
 } from "lucide-react";
 import { useEditor } from "./EditorContext";
 import { __ } from "../lib/i18n";
+import { ICON_CATALOG } from "./slideEditor";
 
 const FONTS = ["Inter", "Georgia", "Roboto", "Arial", "Times New Roman", "Courier New"];
 
@@ -230,6 +232,64 @@ export default function Inspector() {
               <div className="grid grid-cols-2 gap-2">
                 <Button variant="secondary" disabled={disabled} onClick={() => setStyle("objectFit", "cover")}>{__("messages.inspector.cover")}</Button>
                 <Button variant="secondary" disabled={disabled} onClick={() => setStyle("objectFit", "contain")}>{__("messages.inspector.contain")}</Button>
+              </div>
+            </Section>
+
+            <Section id="icon" label={__("messages.inspector.section_icon")}>
+              <div className="grid grid-cols-6 gap-1.5">
+                {Object.keys(ICON_CATALOG).map((name) => {
+                  const active = s?.icon?.name === name;
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      title={name}
+                      aria-label={name}
+                      aria-pressed={active}
+                      disabled={disabled}
+                      onClick={() => cmd.setIcon(name)}
+                      className={[
+                        "grid aspect-square place-items-center rounded-md border text-[var(--foreground)]",
+                        active
+                          ? "border-[var(--gold)] bg-[var(--accent)]"
+                          : "border-[var(--border)] bg-[var(--secondary)] hover:bg-[var(--navy)]/5",
+                      ].join(" ")}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="18"
+                        height="18"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden
+                      >
+                        <path d={ICON_CATALOG[name]} />
+                      </svg>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="grid grid-cols-[1fr_auto] items-end gap-2">
+                <NumberField
+                  label={__("messages.inspector.icon_size")}
+                  unit="px"
+                  value={s?.icon?.size ?? null}
+                  onChange={(v) => cmd.setIconSize(v === "" ? 24 : Number(v))}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  disabled={disabled || !s?.icon}
+                  aria-label={__("messages.inspector.icon_remove")}
+                  onClick={cmd.removeIcon}
+                  title={__("messages.inspector.icon_remove")}
+                >
+                  <Trash2 />
+                </Button>
               </div>
             </Section>
 

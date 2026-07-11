@@ -142,7 +142,7 @@ Implemented under `routes/api.php` with the `/api/v1` prefix (skill mandate: ver
 - [x] **EditorContext** (`resources/js/editor/EditorContext.jsx`): central React context holding slides/selection/html/revision/dirty/status; consumed by `AppShell`/`Topbar`/`LeftPanel`/`Workspace`. API client in `resources/js/lib/api.js`. Replaces prop-drilling; the shell components are now bound to the live `/api/v1` backend (see Phase 5).
 
 ### Phase 4 — Slide editing engine (the core)
-- [x] **Editor bridge** (`resources/js/editor/slideEditor.js`, lazy chunk): `createSlideEditor` operates on the iframe document — selection (click), drag-move, 8-handle resize, contenteditable toggle, style/command dispatch; notifies parent via `onSelection`/`onChange` callbacks. Instantiated in `Workspace.jsx` on iframe load and registered via `EditorContext.registerEngine`.
+- [x] **Editor engine** (`resources/js/editor/slideEditor.js`, lazy chunk): `createSlideEditor` operates on the open Shadow DOM root provided by `<SlideCanvas>` — selection (click), drag-move, 8-handle resize, contenteditable toggle, style/command dispatch (copy/cut/paste/duplicate/nudge/bring-forward/send-backward/group/ungroup/clear-formatting/set-icon/remove-icon/set-icon-size), undo/redo history of innerHTML snapshots (60-entry ring), small clipboard, right-click → `onContextMenu`. Notifies the parent via `onSelection`/`onChange`/`onContextMenu` callbacks. Instantiated in `Workspace.jsx` per slide load and registered via `EditorContext.registerEngine`.
 - [x] **Selection model** in React state: `EditorContext` holds `selection` (tag/box/styles/text), `editMode`, `dirty`; engine pushes selection through `onEngineSelection`.
 - [x] **History**: undo/redo stack of slide body snapshots; push on every mutation; 60-entry limit.
 - [x] **Drag/resize**: pointer handlers in engine; on drag/resize end updates element style and marks dirty.
@@ -152,7 +152,7 @@ Implemented under `routes/api.php` with the `/api/v1` prefix (skill mandate: ver
 - [x] **Color & background**: text color, fill color (color input + hex), gradient/image field (writes `background` shorthand).
 - [x] **Shape**: border radius, border width, border style, border color, box-shadow.
 - [x] **Media**: image src input, object-fit cover/contain.
-- [ ] **Icon**: add/remove inline SVG icon inside selected element (deferred).
+- [x] **Icon**: add/remove inline SVG icon inside selected element. Reported via `selection.icon = { name, size }`; engine methods `cmd.setIcon(name)`, `cmd.removeIcon()`, `cmd.setIconSize(px)`. Inspector section renders a 6-column palette (18 icons from `ICON_CATALOG`), size number field + Remove button. Icons rendered with `currentColor` stroke; sized in `width`/`height` attrs.
 - [ ] **Table**: detect table cell selection; add/remove rows/cols; move row/col; row-height & col-width fields (deferred).
 - [x] **Actions**: group/ungroup, make absolute, clear formatting.
 - [x] **Clear formatting**: strip inline styles on selected element.
@@ -177,7 +177,7 @@ Implemented under `routes/api.php` with the `/api/v1` prefix (skill mandate: ver
 - [x] **API**: `POST /api/v1/presentations/{presentation}/generate` (Form Request `GenerateSlidesRequest`, slug-bound) and `GET /api/v1/generations/{generation}` status endpoint, both versioned + `X-Request-ID` middleware.
 - [x] **Frontend hook**: `GenerateDialog` (Topbar Sparkles button) → `generate(prompt, maxSlides)` in `EditorContext` → `POST` then polls `generationStatus` → refreshes slide list; localized via `messages.ai.*`. Route URLs resolved from named routes (`generate`, `generationShow`) via the Inertia `routes` prop (no hardcoded paths).
 - [x] **Tests**: Pest covers model transitions, `StartGeneration`, job→slides (agent faked), API validation + dispatch, status endpoint. 6 tests, all green.
-- [ ] Guard the editor with auth; per-user presentation ownership (deferred — app currently has no auth wall on the editor).
+- [x] Auth wall for the editor + per-user/team presentation ownership is delivered as part of **Phase 8** (see below).
 
 ### Phase 7 — Polish & QA
 - [x] Toast notifications (shadcn `Sonner`): `EditorContext` surfaces success/error outcomes (save, duplicate, generation) as toasts; generative flow uses a loading toast updated on completion/failure.
@@ -196,7 +196,7 @@ Implemented under `routes/api.php` with the `/api/v1` prefix (skill mandate: ver
 | 1 — Domain model | Done |
 | 2 — Backend API | Done (versioned `/api/v1` + audit + Problem+JSON; gates 8/8) |
 | 3 — Editor shell | Done (responsive Topbar/Sidebar/Workspace/Inspector bound to live `/api/v1`) |
-| 4 — Editing engine | Done (shadow-DOM canvas: selection/drag/resize/inline text/commands/history/keyboard/right-click context menu) — icon/table inspectors deferred |
+| 4 — Editing engine | Done (shadow-DOM canvas: selection/drag/resize/inline text/commands/history/keyboard/right-click context menu/icon) — table inspectors deferred |
 | 5 — Persistence | Done (manual save + 5s auto-save + duplicate + reorder + reload + preview) — templates-copy deferred |
 | 6 — AI hook | Done (`laravel/ai` + structured `SlideDeckGenerator` + state-machine `Generation` + provider failover + frontend `GenerateDialog`); editor auth wall deferred |
 | 7 — Polish & QA | Done (Sonner toasts, a11y labels + focus-visible rings, Safari-compat banner, localized strings); dark mode + responsive visual tests deferred |
