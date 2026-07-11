@@ -13,6 +13,7 @@ import {
 } from "../Components/ui/dialog";
 import { Sparkles } from "lucide-react";
 import { __ } from "../lib/i18n";
+import { toast } from "sonner";
 
 export function GenerateDialog({ open, onClose, onGenerate }) {
   const [prompt, setPrompt] = useState("");
@@ -30,6 +31,7 @@ export function GenerateDialog({ open, onClose, onGenerate }) {
       onClose();
     } catch (err) {
       setError(err.message ?? __("messages.ai.generation_failed"));
+      toast.error(__("messages.ai.generation_failed"));
     } finally {
       setLoading(false);
     }

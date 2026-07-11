@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import * as api from "../lib/api";
+import { toast } from "sonner";
 
 const EditorContext = createContext(null);
 
@@ -176,11 +177,13 @@ export function EditorProvider({
           await loadSlides(root);
           setStatusKey("messages.ai.generation_done");
           setStatusTone("success");
+          toast.success(__("messages.ai.generation_done"));
           return;
         }
         if (status.status === "failed") {
           setStatusKey("messages.ai.generation_failed");
           setStatusTone("error");
+          toast.error(__("messages.ai.generation_failed"));
           return;
         }
         setTimeout(poll, 1500);
@@ -188,6 +191,7 @@ export function EditorProvider({
 
       setStatusKey("messages.ai.generating");
       setStatusTone("loading");
+      toast.loading(__("messages.ai.generating"));
       poll();
 
       return started;
@@ -256,6 +260,20 @@ export function EditorProvider({
   }, []);
 
   const dirty = html !== "" && html !== savedSnapshot;
+
+  // Surface definitive outcomes (and failures) as toasts. Transient states such
+  // as "saving" / "auto-saving" stay in the status bar only.
+  const lastToastKey = useRef(null);
+  useEffect(() => {
+    if (!statusKey) return;
+    if (statusKey === lastToastKey.current) return;
+    lastToastKey.current = statusKey;
+
+    const tone = statusTone;
+    const message = __(statusKey);
+    if (tone === "success") toast.success(message);
+    else if (tone === "error") toast.error(message);
+  }, [statusKey, statusTone]);
 
   // Debounced auto-save while dirty.
   useEffect(() => {

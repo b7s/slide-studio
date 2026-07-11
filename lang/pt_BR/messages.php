@@ -39,6 +39,7 @@ return [
         'got_it' => 'Entendi',
     ],
     'paths' => [
+        'title' => 'Pastas do projeto',
         'deck_label' => 'Apresentação',
         'templates_label' => 'Modelos',
         'choose' => 'Escolher',
@@ -183,6 +184,11 @@ return [
         'generation_failed' => 'A geração falhou',
         'generation_done' => 'Slides gerados',
         'close' => 'Fechar',
+    ],
+    'browser' => [
+        'warn_title' => 'Navegador não suportado',
+        'warn_body' => 'O editor funciona melhor no Chrome, Edge ou Firefox. No Safari, a edição no iframe pode ser limitada.',
+        'dismiss' => 'Entendi',
     ],
     'slide' => [
         'copy_suffix' => '(cópia)',

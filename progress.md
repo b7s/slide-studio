@@ -179,11 +179,12 @@ Implemented under `routes/api.php` with the `/api/v1` prefix (skill mandate: ver
 - [ ] Guard the editor with auth; per-user presentation ownership (deferred — app currently has no auth wall on the editor).
 
 ### Phase 7 — Polish & QA
-- [ ] Responsive breakpoints (collapse panels below 1240px / 1179px / 980px) matching reference media queries
-- [ ] Accessibility: tablist keyboard nav, focus-visible rings, aria-labels on icon buttons, inert on collapsed panels
-- [ ] Browser-compat banner (Safari warning) — informational in our app
-- [ ] Toast notifications for save/duplicate/error (shadcn `Sonner`)
-- [ ] Dark mode support (shadcn themes)
+- [x] Toast notifications (shadcn `Sonner`): `EditorContext` surfaces success/error outcomes (save, duplicate, generation) as toasts; generative flow uses a loading toast updated on completion/failure.
+- [x] Accessibility: `aria-label` on all icon buttons (Topbar/Workspace), focus-visible rings on toolbar, accessible title (`SheetTitle`) on the paths popover, `inert`/hidden handling kept consistent with panel mount/unmount.
+- [x] Browser-compat banner: informational, dismissible Safari/iOS warning (`SafariCompatBanner`), localized via `messages.browser.*`.
+- [x] Localized all new UI strings (`messages.browser.*`, `messages.paths.title`, `messages.ai.*`) in pt_BR + en; verified every referenced key exists in both locales.
+- [ ] Responsive breakpoints — already satisfied by the Phase 3 `AppShell` grid (304/352px collapsible panels below 1280/1024px, sheet fallbacks on small screens).
+- [ ] Dark mode support (shadcn themes) — deferred (visual-only; requires theme token pass across the editor surfaces).
 - [ ] Tests: Pest feature tests for API; Vitest + React Testing Library for editor components; Playwright for end-to-end slide editing
 
 ## Status

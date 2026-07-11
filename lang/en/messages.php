@@ -37,6 +37,7 @@ return [
         'got_it' => 'Got it',
     ],
     'paths' => [
+        'title' => 'Project folders',
         'deck_label' => 'Presentation',
         'templates_label' => 'Templates',
         'choose' => 'Choose',
@@ -181,6 +182,11 @@ return [
         'generation_failed' => 'Generation failed',
         'generation_done' => 'Slides generated',
         'close' => 'Close',
+    ],
+    'browser' => [
+        'warn_title' => 'Unsupported browser',
+        'warn_body' => 'The editor works best in Chrome, Edge, or Firefox. In Safari, iframe editing may be limited.',
+        'dismiss' => 'Got it',
     ],
     'slide' => [
         'copy_suffix' => '(copy)',

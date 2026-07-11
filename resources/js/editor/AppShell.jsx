@@ -6,6 +6,7 @@ import Topbar from "./Topbar";
 import LeftPanel from "./LeftPanel";
 import Workspace from "./Workspace";
 import Inspector from "./Inspector";
+import { SafariCompatBanner } from "./SafariCompatBanner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../Components/ui/sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "../Components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../Components/ui/dialog";
@@ -50,8 +51,9 @@ function PathsPopover({ anchor, open, onOpenChange, deckRoot, templateRoot }) {
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{anchor}</PopoverTrigger>
-      <PopoverContent align="end" className="w-[min(560px,calc(100vw-2rem))]">
-        <div className="grid gap-3">
+       <PopoverContent align="end" className="w-[min(560px,calc(100vw-2rem))]">
+         <SheetTitle className="sr-only">{__("messages.paths.title")}</SheetTitle>
+         <div className="grid gap-3">
           <div className="grid gap-1.5">
             <Label>{__("messages.paths.deck_label")}</Label>
             <div className="flex gap-2">
@@ -116,7 +118,8 @@ function Shell() {
       : "lg:grid-cols-[0px_minmax(0,1fr)]";
 
   return (
-    <div className="grid h-[100dvh] w-screen grid-rows-[auto_minmax(0,1fr)] gap-2 bg-[var(--frame)] p-2">
+    <div className="grid h-[100dvh] w-screen grid-rows-[auto_auto_minmax(0,1fr)] gap-2 bg-[var(--frame)] p-2">
+      <SafariCompatBanner />
       <Topbar
         root={root}
         setRoot={setRoot}
