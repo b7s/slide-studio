@@ -9,6 +9,7 @@ Compact guidance for agents working in this repo. Read `progress.md` for the pha
 - Tailwind v4 + hand-built shadcn-style components. No `components.json`.
 - DB: **SQLite** for dev (`database/database.sqlite`), PostgreSQL later — same schema, just change `DB_CONNECTION`. No migration changes expected.
 - `b7s/catraca` (dev dependency) is the quality gate. Run `vendor/bin/catraca`.
+- `nunomaduro/essentials` provides stricter Laravel defaults (config in `config/essentials.php`): strict models (no lazy loading / no missing-attribute access / no undefined assignment), immutable Carbon dates, auto eager-loading of `$with`, safe console (blocks destructive commands), HTTPS forced in production only, and `php artisan make:action`. All features are opt-in per configurable; review that file before relaxing/extending.
 
 ## Setup & running
 - Full setup once: `composer setup` (installs PHP + JS deps, generates key, migrates, builds).

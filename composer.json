@@ -9,7 +9,8 @@
         "php": "^8.4",
         "inertiajs/inertia-laravel": "^3.0",
         "laravel/framework": "^13.8",
-        "laravel/tinker": "^3.0"
+        "laravel/tinker": "^3.0",
+        "nunomaduro/essentials": "^1.2"
     },
     "require-dev": {
         "b7s/catraca": "^1.0",
