@@ -7,6 +7,7 @@ use App\Models\PresentationUser;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
 
@@ -127,7 +128,7 @@ test('shares index returns all current shares for a presentation', function () {
         ->assertJsonCount(2, 'shares');
 });
 
-test('users search only returns members of the current team', function () {
+test('users search spans every team, not just the current one', function () {
     [$owner, $team, $presentation] = makeTeamPresentation();
     $teammate = User::factory()->create(['name' => 'Alice Doe']);
     $outsider = User::factory()->create(['name' => 'Bob Outsider']);
@@ -139,10 +140,53 @@ test('users search only returns members of the current team', function () {
         ->assertJsonCount(1, 'users')
         ->assertJsonPath('users.0.id', $teammate->id);
 
+    // The outsider belongs to a different team but is still discoverable
+    // because sharing is now cross-team.
     $this->actingAs($owner)
         ->getJson(route('api.v1.users.search', ['q' => 'Outsider']))
         ->assertOk()
+        ->assertJsonCount(1, 'users')
+        ->assertJsonPath('users.0.id', $outsider->id);
+
+    // The owner never sees themselves in the results.
+    $this->actingAs($owner)
+        ->getJson(route('api.v1.users.search', ['q' => $owner->name]))
         ->assertJsonCount(0, 'users');
+});
+
+test('an owner can grant a presentation to a user from another team', function () {
+    [$owner, $team, $presentation] = makeTeamPresentation();
+
+    $otherTeam = Team::create([
+        'user_id' => $owner->id,
+        'name' => 'Other Team',
+        'slug' => 'other-'.Str::random(6),
+        'personal' => false,
+    ]);
+    $outsider = User::factory()->create(['name' => 'Carol Cross']);
+    $otherTeam->members()->attach($outsider, ['role' => 'member']);
+    $outsider->update(['current_team_id' => $otherTeam->id]);
+
+    $this->actingAs($owner)
+        ->putJson(route('api.v1.shares.update', [
+            'presentation' => $presentation->slug, 'user' => $outsider->id,
+        ]), ['role' => 'editor'])
+        ->assertOk()
+        ->assertJsonPath('role', 'editor');
+
+    // The pivot records which team the grantee belongs to.
+    $share = PresentationUser::query()
+        ->where('presentation_id', $presentation->id)
+        ->where('user_id', $outsider->id)
+        ->first();
+    expect($share)->not->toBeNull();
+    expect($share->team_id)->toBe($otherTeam->id);
+
+    // The cross-team user can now open the editor (the controller allows
+    // access via the shared pivot regardless of team).
+    $this->actingAs($outsider)
+        ->get(route('editor', ['presentation' => $presentation->slug]))
+        ->assertOk();
 });
 
 test('invalid role returns 422 Problem+JSON', function () {

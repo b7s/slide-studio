@@ -99,6 +99,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
       },
       icon: findIcon(),
       editableText: isTextEditable(selected),
+      table: tableInfo(),
     });
   }
 
@@ -106,6 +107,50 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     if (!el) return false;
     const tag = el.tagName.toLowerCase();
     return ["p", "span", "h1", "h2", "h3", "h4", "h5", "h6", "li", "a", "div", "td", "th", "button"].includes(tag);
+  }
+
+  function isCell(el) {
+    return !!el && ["td", "th"].includes(el.tagName.toLowerCase());
+  }
+
+  function tableOf(cell) {
+    return cell ? cell.closest("table") : null;
+  }
+
+  function cellCoords(cell) {
+    const tr = cell.parentElement;
+    const rowIndex = Array.from(tr.parentElement.children).indexOf(tr);
+    const colIndex = Array.from(tr.children).indexOf(cell);
+    return { rowIndex, colIndex };
+  }
+
+  function tableDims(table) {
+    const rows = Array.from(table.querySelectorAll("tr"));
+    const rowCount = rows.length;
+    const colCount = rows.reduce((max, r) => Math.max(max, r.children.length), 0);
+    return { rowCount, colCount };
+  }
+
+  // Table metadata surfaced to the Inspector when a cell is selected: the
+  // cell's coordinates plus the table dimensions, and the live row height /
+  // column width of the currently selected cell.
+  function tableInfo() {
+    const cell = isCell(selected) ? selected : null;
+    if (!cell || !cell.isConnected) return { isCell: false };
+    const table = tableOf(cell);
+    if (!table) return { isCell: false };
+    const { rowIndex, colIndex } = cellCoords(cell);
+    const { rowCount, colCount } = tableDims(table);
+    const cs = getComputedStyle(cell);
+    return {
+      isCell: true,
+      rowIndex,
+      colIndex,
+      rowCount,
+      colCount,
+      rowHeight: cell.parentElement.style.height || cs.height,
+      colWidth: cell.style.width || cs.width,
+    };
   }
 
   function buildOverlay() {
@@ -145,7 +190,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   function positionOverlay() {
     if (!overlay || !selected) return;
     const r = selected.getBoundingClientRect();
-    const host = root.host;
+    const host = root.host ?? root;
     const sr = host.getBoundingClientRect();
     // The host may carry a CSS transform (zoom) — its layout box
     // (`offsetWidth`/`offsetHeight`) is unscaled, so `sr.width` divided by
@@ -479,6 +524,122 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     if (node) select(node);
   }
 
+  // ---- table operations (only meaningful on a selected <td>/<th>) ----
+  function afterTableChange() {
+    pushHistory();
+    selectionInfo();
+    emit();
+  }
+
+  function insertRow(after) {
+    const cell = isCell(selected) ? selected : null;
+    if (!cell) return;
+    const tr = cell.parentElement;
+    if (!tr) return;
+    const newTr = document.createElement("tr");
+    for (let i = 0; i < tr.children.length; i += 1) {
+      const td = document.createElement("td");
+      td.textContent = "";
+      newTr.appendChild(td);
+    }
+    tr.parentNode.insertBefore(newTr, after ? tr.nextSibling : tr);
+    afterTableChange();
+  }
+
+  function deleteRow() {
+    const cell = isCell(selected) ? selected : null;
+    if (!cell) return;
+    const tr = cell.parentElement;
+    const tbody = tr.parentElement;
+    if (!tbody || tbody.children.length <= 1) return;
+    tbody.removeChild(tr);
+    if (!cell.isConnected) {
+      clearSelection();
+      afterTableChange();
+      return;
+    }
+    afterTableChange();
+  }
+
+  function insertColumn(after) {
+    const cell = isCell(selected) ? selected : null;
+    if (!cell) return;
+    const { colIndex } = cellCoords(cell);
+    const rows = Array.from(tableOf(cell).querySelectorAll("tr"));
+    rows.forEach((tr) => {
+      const ref = tr.children[colIndex];
+      if (!ref) return;
+      const td = document.createElement("td");
+      td.textContent = "";
+      tr.insertBefore(td, after ? ref.nextSibling : ref);
+    });
+    afterTableChange();
+  }
+
+  function deleteColumn() {
+    const cell = isCell(selected) ? selected : null;
+    if (!cell) return;
+    const { colIndex } = cellCoords(cell);
+    const table = tableOf(cell);
+    const rows = Array.from(table.querySelectorAll("tr"));
+    if (rows.length === 0 || rows[0].children.length <= 1) return;
+    rows.forEach((tr) => {
+      if (tr.children[colIndex]) tr.removeChild(tr.children[colIndex]);
+    });
+    if (!cell.isConnected) {
+      clearSelection();
+      afterTableChange();
+      return;
+    }
+    afterTableChange();
+  }
+
+  function moveRow(dir) {
+    const cell = isCell(selected) ? selected : null;
+    if (!cell) return;
+    const tr = cell.parentElement;
+    const swap = dir > 0 ? tr.nextElementSibling : tr.previousElementSibling;
+    if (!swap) return;
+    if (dir > 0) tr.parentNode.insertBefore(tr, swap.nextSibling);
+    else tr.parentNode.insertBefore(swap, tr);
+    afterTableChange();
+  }
+
+  function moveColumn(dir) {
+    const cell = isCell(selected) ? selected : null;
+    if (!cell) return;
+    const { colIndex } = cellCoords(cell);
+    const swapIndex = colIndex + dir;
+    const table = tableOf(cell);
+    const rows = Array.from(table.querySelectorAll("tr"));
+    if (rows.length === 0 || swapIndex < 0 || swapIndex >= rows[0].children.length) return;
+    rows.forEach((tr) => {
+      const a = tr.children[colIndex];
+      const b = tr.children[swapIndex];
+      if (!a || !b) return;
+      if (dir > 0) tr.insertBefore(a, b.nextSibling);
+      else tr.insertBefore(b, a);
+    });
+    afterTableChange();
+  }
+
+  function setRowHeight(px) {
+    const cell = isCell(selected) ? selected : null;
+    if (!cell) return;
+    const tr = cell.parentElement;
+    if (px === "" || px === null || px === undefined) tr.style.removeProperty("height");
+    else tr.style.height = `${Math.max(1, Number(px) || 0)}px`;
+    afterTableChange();
+  }
+
+  function setColumnWidth(px) {
+    const cell = isCell(selected) ? selected : null;
+    if (!cell) return;
+    if (px === "" || px === null || px === undefined) cell.style.removeProperty("width");
+    else cell.style.width = `${Math.max(1, Number(px) || 0)}px`;
+    afterTableChange();
+  }
+
   function nudge(dx, dy) {
     if (!selected) return;
     applyBox({ x: parseBox(selected).x + dx, y: parseBox(selected).y + dy });
@@ -574,6 +735,14 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     cut,
     paste,
     duplicate,
+    insertRow,
+    deleteRow,
+    insertColumn,
+    deleteColumn,
+    moveRow,
+    moveColumn,
+    setRowHeight,
+    setColumnWidth,
     undo,
     redo,
     getSelected: () => selected,

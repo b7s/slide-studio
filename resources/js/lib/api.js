@@ -65,6 +65,16 @@ export async function duplicateSlide(file, { filename, title = null }) {
   return await res.json();
 }
 
+export async function copyTemplateToDeck(file, { presentationId, title = null }) {
+  const res = await fetch(route("copyToDeck", { slide: file }), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ presentation_id: presentationId, title }),
+  });
+  if (!res.ok) throw new Error("copy_template_failed");
+  return await res.json();
+}
+
 export async function reorderSlides(presentationId, order) {
   const res = await fetch(route("reorder"), {
     method: "POST",

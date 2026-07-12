@@ -18,6 +18,12 @@ import {
   ChevronsUp,
   ChevronsDown,
   Trash2,
+  Plus,
+  Minus,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
 } from "lucide-react";
 import { useEditor } from "./EditorContext";
 import { __ } from "../lib/i18n";
@@ -296,6 +302,50 @@ export default function Inspector() {
                 >
                   <Trash2 />
                 </Button>
+              </div>
+            </Section>
+
+            <Section id="table" label={__("messages.inspector.section_table")}>
+              <p className="text-[11.5px] text-[var(--muted-foreground)]">
+                {s?.table?.isCell
+                  ? __("messages.inspector.table_hint")
+                  : __("messages.inspector.table_select_hint")}
+              </p>
+              <div className="grid gap-1.5">
+                <div className="grid grid-cols-2 gap-1.5">
+                  <Button variant="secondary" disabled={!s?.table?.isCell} onClick={() => cmd.insertRow(false)}>
+                    <Plus className="mr-1 size-3.5" />{__("messages.inspector.add_row_before")}
+                  </Button>
+                  <Button variant="secondary" disabled={!s?.table?.isCell} onClick={() => cmd.insertRow(true)}>
+                    <Plus className="mr-1 size-3.5" />{__("messages.inspector.add_row_after")}
+                  </Button>
+                  <Button variant="secondary" disabled={!s?.table?.isCell || (s?.table?.rowCount ?? 0) <= 1} onClick={cmd.deleteRow}>
+                    <Minus className="mr-1 size-3.5" />{__("messages.inspector.rem_row")}
+                  </Button>
+                  <div className="grid grid-cols-2 gap-1.5 rounded-md border border-[var(--border)] bg-[var(--secondary)] p-1">
+                    <Button variant="ghost" size="icon-sm" disabled={!s?.table?.isCell || (s?.table?.rowIndex ?? 0) <= 0} onClick={() => cmd.moveRow(-1)} aria-label={__("messages.inspector.up_row")}><ArrowUp /></Button>
+                    <Button variant="ghost" size="icon-sm" disabled={!s?.table?.isCell || (s?.table?.rowIndex ?? 0) >= (s?.table?.rowCount ?? 1) - 1} onClick={() => cmd.moveRow(1)} aria-label={__("messages.inspector.down_row")}><ArrowDown /></Button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <Button variant="secondary" disabled={!s?.table?.isCell} onClick={() => cmd.insertColumn(false)}>
+                    <Plus className="mr-1 size-3.5" />{__("messages.inspector.add_col_before")}
+                  </Button>
+                  <Button variant="secondary" disabled={!s?.table?.isCell} onClick={() => cmd.insertColumn(true)}>
+                    <Plus className="mr-1 size-3.5" />{__("messages.inspector.add_col_after")}
+                  </Button>
+                  <Button variant="secondary" disabled={!s?.table?.isCell || (s?.table?.colCount ?? 0) <= 1} onClick={cmd.deleteColumn}>
+                    <Minus className="mr-1 size-3.5" />{__("messages.inspector.rem_col")}
+                  </Button>
+                  <div className="grid grid-cols-2 gap-1.5 rounded-md border border-[var(--border)] bg-[var(--secondary)] p-1">
+                    <Button variant="ghost" size="icon-sm" disabled={!s?.table?.isCell || (s?.table?.colIndex ?? 0) <= 0} onClick={() => cmd.moveColumn(-1)} aria-label={__("messages.inspector.left_col")}><ArrowLeft /></Button>
+                    <Button variant="ghost" size="icon-sm" disabled={!s?.table?.isCell || (s?.table?.colIndex ?? 0) >= (s?.table?.colCount ?? 1) - 1} onClick={() => cmd.moveColumn(1)} aria-label={__("messages.inspector.right_col")}><ArrowRight /></Button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <NumberField label={__("messages.inspector.row_height")} unit="px" value={num(s?.table?.rowHeight)} onChange={(v) => cmd.setRowHeight(v)} />
+                  <NumberField label={__("messages.inspector.col_width")} unit="px" value={num(s?.table?.colWidth)} onChange={(v) => cmd.setColumnWidth(v)} />
+                </div>
               </div>
             </Section>
 

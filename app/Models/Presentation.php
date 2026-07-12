@@ -70,7 +70,7 @@ final class Presentation extends Model
     {
         return $this->belongsToMany(User::class, 'presentation_user')
             ->using(PresentationUser::class)
-            ->withPivot('role', 'shared_by')
+            ->withPivot('role', 'shared_by', 'team_id')
             ->withTimestamps();
     }
 }

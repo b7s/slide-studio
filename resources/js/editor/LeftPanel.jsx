@@ -3,12 +3,12 @@ import { Button } from "../Components/ui/button";
 import { Input } from "../Components/ui/input";
 import { ScrollArea } from "../Components/ui/scroll-area";
 import { Tooltip, TooltipTrigger, TooltipContent } from "../Components/ui/tooltip";
-import { List, Files, ChevronUp, ChevronDown } from "lucide-react";
+import { List, Files, ChevronUp, ChevronDown, CopyPlus } from "lucide-react";
 import { useEditor } from "./EditorContext";
 import { __ } from "../lib/i18n";
 
 export default function LeftPanel({ slides, selectedFile, onSelect, count }) {
-  const { selectFile, duplicate, reorder } = useEditor();
+  const { root, selectFile, duplicate, reorder, copyTemplate } = useEditor();
   const [dupName, setDupName] = useState("");
 
   const handleDuplicate = () => {
@@ -73,42 +73,64 @@ export default function LeftPanel({ slides, selectedFile, onSelect, count }) {
           </div>
         ) : (
           <ul className="grid gap-2">
-            {slides.map((slide) => {
-              const active = slide.file === selectedFile;
-              return (
-                <li key={slide.file}>
-                  <button
-                    type="button"
-                    onClick={() => onSelect(slide.file)}
-                    aria-current={active ? "true" : undefined}
-                    className={[
-                      "flex w-full items-stretch gap-3 rounded-xl border p-2 text-left transition",
-                      active
-                        ? "border-[var(--gold)] bg-[var(--accent)] shadow-[0_0_0_1px_var(--gold)]"
-                        : "border-[var(--border)] bg-[var(--card)] hover:bg-white hover:shadow-sm",
-                    ].join(" ")}
-                  >
-                    <span className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-md bg-[var(--navy)] shadow-sm">
-                      <span className="absolute left-1 top-1 rounded bg-[var(--navy)]/80 px-1 text-[10px] font-bold text-white">
-                        {slide.number}
-                      </span>
-                    </span>
-                    <span className="grid min-w-0 content-center gap-1">
-                      <span className="truncate text-[12.5px] font-semibold leading-tight">
-                        {slide.title || slide.file}
-                      </span>
-                      <span className="truncate text-[10.5px] text-[var(--muted-foreground)]">
-                        {slide.file}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
+             {slides.map((slide) => {
+               const active = slide.file === selectedFile;
+               const isTemplate = root === "templates";
+               return (
+                 <li key={slide.file} className="relative">
+                   <button
+                     type="button"
+                     onClick={() => onSelect(slide.file)}
+                     aria-current={active ? "true" : undefined}
+                     className={[
+                       "flex w-full items-stretch gap-3 rounded-xl border p-2 text-left transition",
+                       active
+                         ? "border-[var(--gold)] bg-[var(--accent)] shadow-[0_0_0_1px_var(--gold)]"
+                         : "border-[var(--border)] bg-[var(--card)] hover:bg-white hover:shadow-sm",
+                     ].join(" ")}
+                   >
+                     <span className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-md bg-[var(--navy)] shadow-sm">
+                       <span className="absolute left-1 top-1 rounded bg-[var(--navy)]/80 px-1 text-[10px] font-bold text-white">
+                         {slide.number}
+                       </span>
+                     </span>
+                     <span className="grid min-w-0 content-center gap-1">
+                       <span className="truncate text-[12.5px] font-semibold leading-tight">
+                         {slide.title || slide.file}
+                       </span>
+                       <span className="truncate text-[10.5px] text-[var(--muted-foreground)]">
+                         {slide.file}
+                       </span>
+                     </span>
+                   </button>
+                   {isTemplate && (
+                     <Tooltip>
+                       <TooltipTrigger asChild>
+                         <Button
+                           type="button"
+                           variant="outline"
+                           size="icon-sm"
+                           aria-label={__("messages.templates.copy_to_deck")}
+                           className="absolute right-2 top-2 bg-[var(--card)]"
+                           onClick={(e) => {
+                             e.stopPropagation();
+                             copyTemplate(slide.file);
+                           }}
+                         >
+                           <CopyPlus />
+                         </Button>
+                       </TooltipTrigger>
+                       <TooltipContent>{__("messages.templates.copy_to_deck")}</TooltipContent>
+                     </Tooltip>
+                   )}
+                 </li>
+               );
+             })}
           </ul>
         )}
       </ScrollArea>
 
+      {root !== "templates" && (
       <div className="mt-3 flex items-center gap-2 border-t border-[var(--border)] pt-3">
         <Input
           placeholder={__("messages.sidebar.duplicate_placeholder")}
@@ -154,6 +176,7 @@ export default function LeftPanel({ slides, selectedFile, onSelect, count }) {
           <TooltipContent>{__("messages.sidebar.move_down_tip")}</TooltipContent>
         </Tooltip>
       </div>
+      )}
 
       <div className="sr-only">
         <span>{__("messages.sidebar.alt_hint")}</span>

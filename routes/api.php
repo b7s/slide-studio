@@ -22,6 +22,7 @@ Route::prefix('v1')->name('api.v1.')->middleware('auth')->group(function () {
     Route::get('slides/html', [SlideController::class, 'htmlByFile'])->name('slides.html');
     Route::post('slides/{slide}', [SlideController::class, 'save'])->name('slides.save');
     Route::post('slides/{slide}/duplicate', [SlideController::class, 'duplicate'])->name('slides.duplicate');
+    Route::post('slides/{slide}/copy-to-deck', [SlideController::class, 'copyToDeck'])->name('slides.copyToDeck');
     Route::post('reorder', [SlideController::class, 'reorder'])->name('reorder');
 
     Route::post('presentations/{presentation}/generate', [GenerateController::class, 'store'])->name('generate');

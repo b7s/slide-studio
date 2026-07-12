@@ -63,7 +63,7 @@ class User extends Authenticatable
     public function sharedPresentations(): BelongsToMany
     {
         return $this->belongsToMany(Presentation::class, 'presentation_user')
-            ->withPivot('role')
+            ->withPivot('role', 'team_id')
             ->withTimestamps();
     }
 }

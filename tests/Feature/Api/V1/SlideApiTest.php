@@ -135,3 +135,55 @@ test('POST /api/v1/reorder persists slide positions', function () {
     expect(Slide::where('filename', '01-a.html')->first()->position)->toBe(2);
     expect(Slide::where('filename', '02-b.html')->first()->position)->toBe(1);
 });
+
+test('POST /api/v1/slides/{file}/copy-to-deck materialises a deck slide from a template', function () {
+    $p = seedPresentation();
+
+    $template = Slide::create([
+        'presentation_id' => $p->id,
+        'filename' => 'tmpl-x.html',
+        'title' => 'Hero',
+        'position' => 99,
+        'source_mode' => SourceMode::Template,
+        'html' => '<section class="slide">Template</section>',
+    ]);
+
+    $expectedPosition = (int) Slide::query()->where('presentation_id', $p->id)->max('position') + 1;
+
+    $response = $this->postJson('/api/v1/slides/tmpl-x.html/copy-to-deck', [
+        'presentation_id' => $p->id,
+        'title' => 'My Hero',
+    ]);
+
+    $response->assertCreated();
+    expect($response->json('data.file'))->toMatch('/\\.html$/');
+    expect($response->json('data.title'))->toBe('My Hero');
+    expect($response->json('data.source_mode'))->toBe(SourceMode::Deck->value);
+
+    $copy = Slide::query()->where('filename', $response->json('data.file'))->first();
+    expect($copy)->not->toBeNull();
+    expect($copy->source_mode)->toBe(SourceMode::Deck);
+    expect($copy->html)->toBe('<section class="slide">Template</section>');
+    expect($copy->position)->toBe($expectedPosition);
+
+    // The original template is untouched.
+    expect(Slide::where('filename', 'tmpl-x.html')->first()->source_mode)->toBe(SourceMode::Template);
+
+    expect(AuditLog::where('event', 'slide.copied_from_template')->count())->toBe(1);
+});
+
+test('POST /api/v1/slides/{file}/copy-to-deck requires a valid presentation_id', function () {
+    $p = seedPresentation();
+
+    Slide::create([
+        'presentation_id' => $p->id,
+        'filename' => 'tmpl-y.html',
+        'title' => 'Hero',
+        'position' => 99,
+        'source_mode' => SourceMode::Template,
+    ]);
+
+    $this->postJson('/api/v1/slides/tmpl-y.html/copy-to-deck', ['presentation_id' => 999999])
+        ->assertStatus(422)
+        ->assertJsonPath('status', 422);
+});

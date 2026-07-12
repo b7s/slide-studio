@@ -9,6 +9,7 @@ import {
 } from "react";
 import * as api from "../lib/api";
 import { toast } from "sonner";
+import { __ } from "../lib/i18n";
 
 const EditorContext = createContext(null);
 
@@ -159,6 +160,33 @@ export function EditorProvider({
     selectFile(selectedFileRef.current);
   }, [selectFile]);
 
+  // Copy a template slide into the current presentation's deck. Templates mode
+  // lists slides with source_mode = Template; this materialises a new deck
+  // slide (source_mode = Deck) from the template's HTML, then switches the
+  // root back to the deck and selects the freshly created slide.
+  const copyTemplate = useCallback(
+    async (file, title = null) => {
+      const presentationId = presentationIdRef.current;
+      if (!file || !presentationId) return;
+      setStatusKey("messages.templates.copying");
+      setStatusTone("loading");
+      try {
+        const copy = await api.copyTemplateToDeck(file, { presentationId, title });
+        setRoot("deck");
+        await loadSlides("deck");
+        await selectFile(copy.file);
+        setStatusKey("messages.templates.copied");
+        setStatusTone("success");
+        toast.success(__("messages.templates.copied"));
+      } catch {
+        setStatusKey("messages.templates.copy_error");
+        setStatusTone("error");
+        toast.error(__("messages.templates.copy_error"));
+      }
+    },
+    [loadSlides, selectFile]
+  );
+
   const preview = useCallback(() => {
     const file = selectedFileRef.current;
     if (file) {
@@ -239,6 +267,14 @@ export function EditorProvider({
       group: run("group"),
       ungroup: run("ungroup"),
       clearFormatting: run("clearFormatting"),
+      insertRow: run("insertRow"),
+      deleteRow: run("deleteRow"),
+      insertColumn: run("insertColumn"),
+      deleteColumn: run("deleteColumn"),
+      moveRow: run("moveRow"),
+      moveColumn: run("moveColumn"),
+      setRowHeight: run("setRowHeight"),
+      setColumnWidth: run("setColumnWidth"),
       setIcon: run("setIcon"),
       removeIcon: run("removeIcon"),
       setIconSize: run("setIconSize"),
@@ -318,6 +354,7 @@ export function EditorProvider({
       reorder,
       reload,
       preview,
+      copyTemplate,
       generate,
       presentationId,
       presentationSlug,
@@ -347,6 +384,7 @@ export function EditorProvider({
       reorder,
       reload,
       preview,
+      copyTemplate,
       generate,
       presentationId,
       presentationSlug,

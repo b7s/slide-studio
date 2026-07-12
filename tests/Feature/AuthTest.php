@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Presentation;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -38,6 +39,11 @@ test('a new user is registered with a personal team and current_team_id set', fu
     expect($team->personal)->toBeTrue();
     expect($team->members)->toHaveCount(1);
     expect($team->members->first()->id)->toBe($user->id);
+
+    // A starter "space" is created so the editor never 403s on first login.
+    $presentation = Presentation::query()->where('team_id', $team->id)->first();
+    expect($presentation)->not->toBeNull();
+    expect($presentation->slides)->toHaveCount(1);
 });
 
 test('an authenticated user can log out', function () {

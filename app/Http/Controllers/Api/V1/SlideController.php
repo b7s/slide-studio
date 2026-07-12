@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Slide\CopyTemplateToDeck;
 use App\Actions\Slide\DuplicateSlide;
 use App\Actions\Slide\ReorderSlides;
 use App\Actions\Slide\SaveSlide;
 use App\Enums\Slide\SourceMode;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Slide\CopyTemplateRequest;
 use App\Http\Requests\Slide\DuplicateSlideRequest;
 use App\Http\Requests\Slide\ReorderSlidesRequest;
 use App\Http\Requests\Slide\SaveSlideRequest;
@@ -60,6 +62,18 @@ final class SlideController extends Controller
      * @throws Throwable
      */
     public function duplicate(DuplicateSlideRequest $request, Slide $slide, DuplicateSlide $action): JsonResponse
+    {
+        $copy = $action($slide, $request->payload());
+
+        return new SlideResource($copy)->response()->setStatusCode(201);
+    }
+
+    /**
+     * Copy a template slide into the target presentation as a new deck slide.
+     *
+     * @throws Throwable
+     */
+    public function copyToDeck(CopyTemplateRequest $request, Slide $slide, CopyTemplateToDeck $action): JsonResponse
     {
         $copy = $action($slide, $request->payload());
 

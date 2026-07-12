@@ -2,6 +2,7 @@
 
 namespace App\Actions\Fortify;
 
+use App\Actions\Presentation\CreateStarterPresentation;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -55,6 +56,10 @@ class CreateNewUser implements CreatesNewUsers
 
             $user->current_team_id = $team->id;
             $user->save();
+
+            // Give every new account a starter "space" so the editor never
+            // 403s on an empty account on first login.
+            (new CreateStarterPresentation)($team);
 
             return $user;
         });

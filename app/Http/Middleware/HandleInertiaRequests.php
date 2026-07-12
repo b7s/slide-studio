@@ -90,6 +90,7 @@ class HandleInertiaRequests extends Middleware
             'slidesHtml' => route('api.v1.slides.html', absolute: false),
             'slideSave' => route('api.v1.slides.save', ['slide' => self::SLIDE_TOKEN], false),
             'slideDuplicate' => route('api.v1.slides.duplicate', ['slide' => self::SLIDE_TOKEN], false),
+            'copyToDeck' => route('api.v1.slides.copyToDeck', ['slide' => self::SLIDE_TOKEN], false),
             'reorder' => route('api.v1.reorder', absolute: false),
             'generate' => route('api.v1.generate', ['presentation' => self::PRESENTATION_TOKEN], false),
             'generationShow' => route('api.v1.generation.show', ['generation' => self::GENERATION_TOKEN], false),

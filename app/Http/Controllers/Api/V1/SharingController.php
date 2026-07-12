@@ -71,25 +71,30 @@ final class SharingController extends Controller
 
     public function search(Request $request): JsonResponse
     {
+        $caller = $request->user();
         $query = (string) $request->query('q', '');
-        $team = $request->user()?->currentTeam;
 
-        if (! $team) {
-            return response()->json(['users' => []]);
-        }
-
-        $users = $team->members()
+        // Cross-team sharing: search every user in the workspace (not only the
+        // active team) so a presentation can be granted to someone on another
+        // team. The owner is excluded from their own search results.
+        $users = User::query()
+            ->where('id', '!=', $caller?->id)
             ->where(function ($q) use ($query): void {
                 $q->where('name', 'like', "%{$query}%")
                     ->orWhere('email', 'like', "%{$query}%");
             })
             ->limit(20)
             ->get()
-            ->map(fn (User $user) => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-            ]);
+            ->map(function (User $user): array {
+                $team = $user->currentTeam;
+
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'team' => $team !== null ? $team->name : null,
+                ];
+            });
 
         return response()->json(['users' => $users]);
     }

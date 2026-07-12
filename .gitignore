@@ -1,5 +1,7 @@
 /node_modules
 /public/build
+/Tests/Browser/Screenshots
+/tests/Browser/Screenshots
 /public/hot
 /public/storage
 /storage/*.key
@@ -21,3 +23,6 @@ yarn-error.log
 /.fleet
 /.idea
 /.vscode
+
+# Agent working directory
+.ai/

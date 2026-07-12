@@ -23,7 +23,7 @@ final class SharePresentation
         return DB::transaction(function () use ($presentation, $targetUser, $role, $sharedBy): PresentationUser {
             $share = PresentationUser::query()->updateOrCreate(
                 ['presentation_id' => $presentation->id, 'user_id' => $targetUser->id],
-                ['role' => $role, 'shared_by' => $sharedBy->id],
+                ['role' => $role, 'shared_by' => $sharedBy->id, 'team_id' => $targetUser->current_team_id],
             );
 
             Audit::record('presentation.shared', $presentation, [

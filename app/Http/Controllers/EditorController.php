@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Presentation\CreateStarterPresentation;
 use App\Enums\Sharing\PresentationRole;
 use App\Models\Presentation;
 use App\Models\Slide;
+use App\Models\Team;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -24,7 +26,14 @@ final class EditorController extends Controller
                 ->orWhereHas('sharedUsers', fn ($q) => $q->where('user_id', $user->id))
                 ->with('slides')
                 ->first();
-            abort_unless($presentation !== null, 403);
+
+            // First login / empty account: lazily create a starter "space"
+            // for the user's current team instead of 403-ing.
+            if ($presentation === null) {
+                $team = $user->currentTeam ?? Team::query()->find($user->current_team_id);
+                abort_unless($team !== null, 403);
+                $presentation = (new CreateStarterPresentation)($team);
+            }
         }
 
         $slides = $presentation->slides ?? collect();

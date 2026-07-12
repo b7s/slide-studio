@@ -164,9 +164,15 @@ export function ShareDialog({ open, onClose, presentationSlug, canShare }) {
                       }}
                       className="flex w-full items-center justify-between border-b border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--muted)] last:border-b-0"
                     >
-                      <span>{user.name}</span>
-                      <span className="text-xs text-[var(--muted-foreground)]">
-                        {user.email}
+                      <span className="flex min-w-0 flex-col text-left">
+                        <span className="truncate font-medium">{user.name}</span>
+                        <span className="truncate text-xs text-[var(--muted-foreground)]">
+                          {user.email}
+                          {user.team ? ` · ${user.team}` : ""}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-xs text-[var(--muted-foreground)]">
+                        {user.team ? __("messages.sharing.other_team") : __("messages.sharing.same_team")}
                       </span>
                     </button>
                   ))}
