@@ -122,7 +122,11 @@ class HandleInertiaRequests extends Middleware
             $messages = require $path;
             $flat = [];
 
-            $dot = static function (array $items, string $prefix = '') use (&$dot, &$flat): void {
+            // Seed the prefix with the filename ("messages") so keys are
+            // emitted as "messages.<section>.<key>" — matching how the
+            // frontend and Backend __() resolve them (e.g.
+            // __("messages.topbar.slides_panel_tip")).
+            $dot = static function (array $items, string $prefix = 'messages') use (&$dot, &$flat): void {
                 foreach ($items as $key => $value) {
                     $next = $prefix === '' ? (string) $key : "{$prefix}.{$key}";
                     if (is_array($value)) {

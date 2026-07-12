@@ -1,0 +1,12 @@
+{
+    "mcpServers": {
+        "laravel-boost": {
+            "command": "wsl.exe",
+            "args": [
+                "/usr/bin/php8.4",
+                "/home/b7s/documents/projects/b7s/slide-studio/artisan",
+                "boost:mcp"
+            ]
+        }
+    }
+}

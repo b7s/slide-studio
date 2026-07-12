@@ -1,24 +1,17 @@
 import "./../css/app.css";
-import React, { useEffect } from "react";
+import React from "react";
 import { createRoot } from "react-dom/client";
-import { createInertiaApp, usePage } from "@inertiajs/react";
+import { createInertiaApp } from "@inertiajs/react";
 import { TooltipProvider } from "./Components/ui/tooltip";
 import { Toaster } from "./Components/ui/sonner";
 import { setTranslations } from "./lib/i18n";
 import { setRoutes } from "./lib/routes";
 
-function I18nSync() {
-  const { props } = usePage();
-  useEffect(() => {
-    if (props.translations) {
-      setTranslations(props.translations);
-    }
-    if (props.routes) {
-      setRoutes(props.routes);
-    }
-  }, [props.translations, props.routes]);
-  return null;
-}
+// Initial translations + named-route map are seeded eagerly from
+// `props.initialPage` inside `setup`. Inertia renders a single full-page
+// route (the editor), so SPA navigation doesn't re-trigger a sync; this
+// keeps `usePage()` out of the bundle bootstrap (it must run inside the
+// Inertia provider, which is `<App>` — siblings can't read it).
 
 createInertiaApp({
   resolve: (name) => {
@@ -37,7 +30,6 @@ createInertiaApp({
     createRoot(el).render(
       <TooltipProvider delayDuration={300}>
         <App {...props} />
-        <I18nSync />
         <Toaster />
       </TooltipProvider>
     );
