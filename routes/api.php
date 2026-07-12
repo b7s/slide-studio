@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\ConfigController;
 use App\Http\Controllers\Api\V1\GenerateController;
+use App\Http\Controllers\Api\V1\PresentationLibraryController;
 use App\Http\Controllers\Api\V1\SharingController;
 use App\Http\Controllers\Api\V1\SlideController;
 use App\Models\Generation;
@@ -17,6 +18,10 @@ Route::bind('user', static fn (int $value): User => User::query()->findOrFail($v
 
 Route::prefix('v1')->name('api.v1.')->middleware('auth')->group(function () {
     Route::get('config', [ConfigController::class, 'show'])->name('config');
+
+    Route::get('library/groups', [PresentationLibraryController::class, 'groups'])->name('library.groups');
+    Route::post('library', [PresentationLibraryController::class, 'store'])->name('library.store');
+    Route::get('library', [PresentationLibraryController::class, 'index'])->name('library.index');
 
     Route::get('slides', [SlideController::class, 'index'])->name('slides.index');
     Route::get('slides/html', [SlideController::class, 'htmlByFile'])->name('slides.html');

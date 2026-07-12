@@ -4,6 +4,7 @@ use App\Exceptions\ProblemJsonException;
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Providers\FortifyServiceProvider;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -64,6 +65,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 $status = 404;
                 $title = __('messages.errors.not_found');
                 $detail = __('messages.errors.not_found_detail');
+            } elseif ($e instanceof AuthenticationException) {
+                $status = 401;
+                $title = __('messages.errors.unauthorized');
+                $detail = __('messages.errors.unauthorized_detail');
             } elseif ($e instanceof AccessDeniedHttpException) {
                 $status = 403;
                 $title = __('messages.errors.forbidden');

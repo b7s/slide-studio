@@ -190,9 +190,9 @@ export default function Workspace() {
   ];
 
   return (
-    <section className="relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
+    <section className="relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
       <div className="pointer-events-none absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2">
-        <div className="pointer-events-auto flex items-center gap-0.5 rounded-xl border border-[var(--border)] bg-white/90 p-1 shadow-lg backdrop-blur">
+        <div className="pointer-events-auto flex items-center gap-0.5 rounded-xl border border-[var(--border)] bg-white/90 p-1 backdrop-blur">
           <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.undo")} onClick={cmd.undo} className={toolBtn}>
             <Undo2 />
           </Button>
@@ -229,10 +229,10 @@ export default function Workspace() {
             <Trash2 />
           </Button>
         </div>
-        <span className="pointer-events-auto hidden max-w-[260px] truncate rounded-xl border border-[var(--border)] bg-white/90 px-3 py-2 text-xs text-[var(--muted-foreground)] shadow-lg backdrop-blur sm:inline-block">
+        <span className="pointer-events-auto hidden max-w-[260px] truncate rounded-xl border border-[var(--border)] bg-white/90 px-3 py-2 text-xs text-[var(--muted-foreground)] backdrop-blur sm:inline-block">
           {selectedLabel || __("messages.workspace.select_element")}
         </span>
-        <div className="pointer-events-auto flex items-center gap-0.5 rounded-xl border border-[var(--border)] bg-white/90 p-1 shadow-lg backdrop-blur">
+        <div className="pointer-events-auto flex items-center gap-0.5 rounded-xl border border-[var(--border)] bg-white/90 p-1 backdrop-blur">
           <Button
             variant="ghost"
             size="icon-sm"
@@ -267,7 +267,7 @@ export default function Workspace() {
         style={{ backgroundSize: "22px 22px" }}
       >
         <div
-          className="relative rounded-xl bg-[var(--navy)] shadow-2xl"
+          className="relative rounded-xl bg-[var(--navy)]"
           style={{ width: `${FRAME_W}px`, height: `${FRAME_H}px`, transform: `scale(${zoom / 100})`, transformOrigin: "center" }}
         >
           <SlideCanvas

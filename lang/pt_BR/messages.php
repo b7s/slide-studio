@@ -5,6 +5,10 @@
 // problem+json titles/details, toasts, modals) MUST be defined here and
 // resolved via __() — never hardcoded as a literal in PHP or JSX.
 return [
+    'presentation' => [
+        'untitled' => 'Sem título',
+    ],
+
     // Brand name comes from config('app.name') — shared with the frontend via
     // the Inertia `app` prop (see HandleInertiaRequests.php). No hardcoded
     // brand text in PHP/JSX; no lang fallback for the brand either.
@@ -209,11 +213,14 @@ return [
     ],
     'errors' => [
         'internal_error' => 'Erro interno do servidor',
+        'unexpected' => 'Erro inesperado',
         'unexpected_detail' => 'Ocorreu um erro inesperado.',
         'unprocessable' => 'Conteúdo não processável',
         'validation_detail' => 'Os dados enviados são inválidos.',
         'not_found' => 'Não encontrado',
         'not_found_detail' => 'O recurso solicitado não foi encontrado.',
+        'unauthorized' => 'Não autenticado',
+        'unauthorized_detail' => 'Você precisa estar autenticado para acessar este recurso.',
         'forbidden' => 'Proibido',
         'forbidden_detail' => 'Você não tem permissão para realizar esta ação.',
         'conflict' => 'Conflito',
@@ -265,5 +272,26 @@ return [
         'group' => 'Agrupar',
         'ungroup' => 'Desagrupar',
         'delete' => 'Excluir',
+    ],
+    'library' => [
+        'title' => 'Meus arquivos',
+        'search_placeholder' => 'Buscar apresentações…',
+        'new_presentation' => 'Nova apresentação',
+        'spaces' => 'Espaços',
+        'shared_with_me' => 'Compartilhado comigo',
+        'sort_by' => 'Ordenar por',
+        'sort_name' => 'Nome',
+        'sort_updated' => 'Última modificação',
+        'dir_asc' => 'Crescente',
+        'dir_desc' => 'Decrescente',
+        'updated' => 'Atualizado',
+        'empty' => 'Nenhuma apresentação',
+        'empty_hint' => 'Crie uma nova apresentação para começar.',
+        'load_more' => 'Carregar mais',
+        'not_member' => 'Você não pertence a este espaço.',
+        'unknown_team' => 'Espaço inválido.',
+        'role_owner' => 'Proprietário',
+        'role_editor' => 'Editor',
+        'role_viewer' => 'Visualizador',
     ],
 ];

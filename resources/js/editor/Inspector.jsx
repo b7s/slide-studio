@@ -112,7 +112,7 @@ export default function Inspector() {
   const setPx = (prop, value) => cmd.setStyle(prop, value === "" ? "" : `${value}px`);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--sidebar)] shadow-sm">
+    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--sidebar)]">
       <Tabs value={tab} onValueChange={setTab} className="flex h-full flex-col">
         <div className="m-4 mb-0">
           <TabsList className="grid w-full grid-cols-2">

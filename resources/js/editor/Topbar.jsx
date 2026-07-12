@@ -17,10 +17,12 @@ import {
   SlidersHorizontal,
   Sparkles,
   Share2,
+  Library,
 } from "lucide-react";
 import { useEditorPanels } from "./EditorPanelsContext";
 import { useEditor } from "./EditorContext";
 import { __ } from "../lib/i18n";
+import { route } from "../lib/routes";
 
 function IconTip({ label, children }) {
   return (
@@ -40,6 +42,8 @@ export default function Topbar({
   unsaved,
   sidebarInline,
   inspectorInline,
+  sidebarCanInline,
+  inspectorCanInline,
   onToggleSidebar,
   onToggleInspector,
   onOpenSidebarSheet,
@@ -58,9 +62,16 @@ export default function Topbar({
   const readOnly = !(permissions?.canEdit ?? false);
 
   return (
-    <header className="z-30 col-span-full flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2.5 shadow-[0_1px_2px_rgba(23,35,45,0.05),0_18px_42px_-34px_rgba(23,35,45,0.32)] sm:px-4">
+    <header className="z-30 col-span-full flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2.5 sm:px-4">
       <div className="flex min-w-0 items-center gap-2">
-        {!sidebarInline && (
+        {!sidebarInline && sidebarCanInline && (
+          <IconTip label={__("messages.topbar.open_slides")}>
+            <Button variant="ghost" size="icon" aria-label={__("messages.topbar.open_slides")} aria-pressed={false} onClick={onToggleSidebar}>
+              <PanelLeft />
+            </Button>
+          </IconTip>
+        )}
+        {!sidebarInline && !sidebarCanInline && (
           <IconTip label={__("messages.topbar.slides_panel_tip")}>
             <Button variant="ghost" size="icon" aria-label={__("messages.topbar.open_slides")} onClick={onOpenSidebarSheet}>
               <PanelLeft />
@@ -68,12 +79,12 @@ export default function Topbar({
           </IconTip>
         )}
         {sidebarInline && (
-          <IconTip label={onToggleSidebar ? __("messages.topbar.hide_slides") : __("messages.topbar.slides")}>
+          <IconTip label={__("messages.topbar.hide_slides")}>
             <Button
               variant="ghost"
               size="icon"
               aria-label={__("messages.topbar.hide_slides")}
-              aria-pressed={false}
+              aria-pressed={true}
               onClick={onToggleSidebar}
             >
               <PanelLeft />
@@ -81,7 +92,7 @@ export default function Topbar({
           </IconTip>
         )}
         <div className="flex items-center gap-3">
-          <div className="grid size-9 place-items-center rounded-lg bg-gradient-to-br from-[#16283a] to-[#0a141d] shadow-md">
+          <div className="grid size-9 place-items-center rounded-lg bg-gradient-to-br from-[#16283a] to-[#0a141d]">
             <span className="text-sm font-bold text-white">{app.short}</span>
           </div>
           <div className="min-w-0">
@@ -91,6 +102,16 @@ export default function Topbar({
             </p>
           </div>
           <Badge>{__("messages.topbar.local_badge")}</Badge>
+          <IconTip label={__("messages.library.title")}>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={__("messages.library.title")}
+              onClick={() => router.visit(route("library"))}
+            >
+              <Library />
+            </Button>
+          </IconTip>
           {readOnly && (
             <Badge variant="danger">
               {__("messages.sharing.readonly_mode")}
@@ -146,7 +167,14 @@ export default function Topbar({
             <ArrowDownToLine className="sm:hidden" />
           </Button>
         </IconTip>
-        {!inspectorInline && (
+        {!inspectorInline && inspectorCanInline && (
+          <IconTip label={__("messages.topbar.open_props")}>
+            <Button variant="ghost" size="icon" aria-label={__("messages.topbar.open_props")} aria-pressed={false} onClick={onToggleInspector}>
+              <SlidersHorizontal />
+            </Button>
+          </IconTip>
+        )}
+        {!inspectorInline && !inspectorCanInline && (
           <IconTip label={__("messages.topbar.props")}>
             <Button variant="ghost" size="icon" aria-label={__("messages.topbar.open_props")} onClick={onOpenInspectorSheet}>
               <SlidersHorizontal />
@@ -155,7 +183,7 @@ export default function Topbar({
         )}
         {inspectorInline && (
           <IconTip label={__("messages.topbar.hide_props")}>
-            <Button variant="ghost" size="icon" aria-label={__("messages.topbar.hide_props")} onClick={onToggleInspector}>
+            <Button variant="ghost" size="icon" aria-label={__("messages.topbar.hide_props")} aria-pressed={true} onClick={onToggleInspector}>
               <SlidersHorizontal />
             </Button>
           </IconTip>

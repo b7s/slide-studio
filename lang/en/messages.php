@@ -3,6 +3,10 @@
 // English fallback for the default application strings.
 // Mirrors lang/pt_BR/messages.php — only keys that need an English fallback.
 return [
+    'presentation' => [
+        'untitled' => 'Untitled',
+    ],
+
     // Brand name comes from config('app.name') — shared with the frontend via
     // the Inertia `app` prop (see HandleInertiaRequests.php). No hardcoded
     // brand text in PHP/JSX; no lang fallback for the brand either.
@@ -207,11 +211,14 @@ return [
     ],
     'errors' => [
         'internal_error' => 'Internal Server Error',
+        'unexpected' => 'Unexpected error',
         'unexpected_detail' => 'An unexpected error occurred.',
         'unprocessable' => 'Unprocessable Content',
         'validation_detail' => 'The given data was invalid.',
         'not_found' => 'Not Found',
         'not_found_detail' => 'The requested resource was not found.',
+        'unauthorized' => 'Unauthorized',
+        'unauthorized_detail' => 'You must be authenticated to access this resource.',
         'forbidden' => 'Forbidden',
         'forbidden_detail' => 'You are not allowed to perform this action.',
         'conflict' => 'Conflict',
@@ -263,5 +270,26 @@ return [
         'group' => 'Group',
         'ungroup' => 'Ungroup',
         'delete' => 'Delete',
+    ],
+    'library' => [
+        'title' => 'My files',
+        'search_placeholder' => 'Search presentations…',
+        'new_presentation' => 'New presentation',
+        'spaces' => 'Spaces',
+        'shared_with_me' => 'Shared with me',
+        'sort_by' => 'Sort by',
+        'sort_name' => 'Name',
+        'sort_updated' => 'Last modified',
+        'dir_asc' => 'Ascending',
+        'dir_desc' => 'Descending',
+        'updated' => 'Updated',
+        'empty' => 'No presentations',
+        'empty_hint' => 'Create a new presentation to get started.',
+        'load_more' => 'Load more',
+        'not_member' => 'You do not belong to this space.',
+        'unknown_team' => 'Invalid space.',
+        'role_owner' => 'Owner',
+        'role_editor' => 'Editor',
+        'role_viewer' => 'Viewer',
     ],
 ];

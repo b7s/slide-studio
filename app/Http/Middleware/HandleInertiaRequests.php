@@ -86,6 +86,11 @@ class HandleInertiaRequests extends Middleware
     {
         return [
             'config' => route('api.v1.config', absolute: false),
+            'library' => route('library', absolute: false),
+            'libraryIndex' => route('api.v1.library.index', absolute: false),
+            'libraryGroups' => route('api.v1.library.groups', absolute: false),
+            'libraryStore' => route('api.v1.library.store', absolute: false),
+            'editor' => route('editor', ['presentation' => self::PRESENTATION_TOKEN], false),
             'slidesIndex' => route('api.v1.slides.index', absolute: false),
             'slidesHtml' => route('api.v1.slides.html', absolute: false),
             'slideSave' => route('api.v1.slides.save', ['slide' => self::SLIDE_TOKEN], false),

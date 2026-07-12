@@ -36,7 +36,7 @@ export default function ContextMenu({ position, items, onClose }) {
       ref={ref}
       role="menu"
       tabIndex={-1}
-      className="fixed z-[2147483647] min-w-[180px] max-w-[230px] rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 text-sm shadow-xl outline-none"
+      className="fixed z-[2147483647] min-w-[180px] max-w-[230px] rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 text-sm outline-none"
       style={{ left: x, top: y }}
     >
       {items.map((item, i) => item.separator ? (

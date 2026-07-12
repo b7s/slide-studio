@@ -75,6 +75,46 @@ export async function copyTemplateToDeck(file, { presentationId, title = null })
   return await res.json();
 }
 
+export async function fetchLibraryGroups() {
+  const res = await fetch(route("libraryGroups"));
+  if (!res.ok) throw new Error("library_groups_failed");
+  const data = await res.json();
+  return data.groups;
+}
+
+export async function fetchPresentations({
+  group,
+  teamId = null,
+  query = "",
+  sort = "updated_at",
+  dir = "desc",
+  page = 1,
+  perPage = 12,
+}) {
+  const qs = new URLSearchParams();
+  qs.set("group", group);
+  if (teamId) qs.set("team_id", String(teamId));
+  if (query) qs.set("query", query);
+  qs.set("sort", sort);
+  qs.set("dir", dir);
+  qs.set("page", String(page));
+  qs.set("per_page", String(perPage));
+
+  const res = await fetch(`${route("libraryIndex")}?${qs.toString()}`);
+  if (!res.ok) throw new Error("library_failed");
+  return await res.json();
+}
+
+export async function createPresentation({ title = null, teamId = null } = {}) {
+  const res = await fetch(route("libraryStore"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ title, team_id: teamId }),
+  });
+  if (!res.ok) throw new Error("create_presentation_failed");
+  return await res.json();
+}
+
 export async function reorderSlides(presentationId, order) {
   const res = await fetch(route("reorder"), {
     method: "POST",

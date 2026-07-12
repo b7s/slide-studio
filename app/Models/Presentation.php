@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 /**
  * @property int $id
@@ -34,6 +35,23 @@ final class Presentation extends Model
     protected $casts = [
         'settings' => 'array',
     ];
+
+    /**
+     * Persist a fresh, empty presentation (no slides) for the given team.
+     *
+     * @return static
+     */
+    public static function createForTeam(Team $team, string $title): self
+    {
+        return self::create([
+            'user_id' => $team->user_id,
+            'team_id' => $team->id,
+            'title' => $title,
+            'slug' => Str::slug($title).'-'.Str::random(4),
+            'deck_path' => '/presentation',
+            'template_path' => '/templates',
+        ]);
+    }
 
     /** @return BelongsTo<User, static> */
     public function user(): BelongsTo

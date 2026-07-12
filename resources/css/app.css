@@ -28,7 +28,7 @@
   --popover-foreground: var(--ink);
   --primary: var(--navy);
   --primary-foreground: #f8fafc;
-  --secondary: var(--paper-2);
+  --secondary: var(--input);
   --secondary-foreground: var(--ink);
   --muted: var(--paper-2);
   --muted-foreground: var(--ink-muted);
@@ -52,7 +52,7 @@
   --popover-foreground: #eef2f6;
   --primary: #1a3a57;
   --primary-foreground: #fff;
-  --secondary: #14283a;
+  --secondary: var(--input);
   --secondary-foreground: #eef2f6;
   --muted: #14283a;
   --muted-foreground: #93a2b0;

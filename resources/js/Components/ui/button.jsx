@@ -10,15 +10,15 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[0_12px_26px_-17px_rgba(18,24,29,0.85)] hover:bg-[var(--navy-2)]",
+          "bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--navy-2)]",
         destructive:
           "bg-[var(--destructive)] text-[var(--destructive-foreground)] hover:bg-[var(--destructive)]/90",
         outline:
-          "border border-[var(--border)] bg-[var(--card)] shadow-sm hover:bg-[var(--secondary)] hover:text-[var(--foreground)]",
+          "border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]",
         secondary:
           "bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:bg-[var(--secondary)]/80",
         ghost: "hover:bg-[var(--secondary)] hover:text-[var(--foreground)]",
-        save: "min-h-9 rounded-md border border-[#1b2228] bg-gradient-to-b from-[#2b3339] to-[#171d22] text-white shadow-[0_12px_26px_-17px_rgba(18,24,29,0.85)] hover:border-[var(--navy-2)] hover:from-[#173854] hover:to-[#0c2033]",
+        save: "min-h-9 rounded-md border border-[#1b2228] bg-gradient-to-b from-[#2b3339] to-[#171d22] text-white hover:border-[var(--navy-2)] hover:from-[#173854] hover:to-[#0c2033]",
         gold: "bg-[var(--accent)] text-[var(--accent-foreground)] border border-[var(--gold)]/50 hover:bg-[var(--gold)]/20",
       },
       size: {

@@ -7,7 +7,6 @@ use App\Models\Presentation;
 use App\Models\Team;
 use App\Services\Audit;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 final class CreateStarterPresentation
 {
@@ -22,15 +21,8 @@ final class CreateStarterPresentation
         return DB::transaction(function () use ($team, $title): Presentation {
             $title = $title ?? 'Apresentação';
 
-            $presentation = Presentation::create([
-                'user_id' => $team->user_id,
-                'team_id' => $team->id,
-                'title' => $title,
-                'slug' => Str::slug($title).'-'.Str::random(4),
-                'deck_path' => '/presentation',
-                'template_path' => '/templates',
-                'settings' => ['theme' => 'navy-gold'],
-            ]);
+            $presentation = Presentation::createForTeam($team, $title);
+            $presentation->update(['settings' => ['theme' => 'navy-gold']]);
 
             $presentation->slides()->create([
                 'position' => 1,

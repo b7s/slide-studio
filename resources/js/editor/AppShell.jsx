@@ -106,16 +106,16 @@ function Shell() {
   const [inspectorSheet, setInspectorSheet] = useState(false);
 
   const gridCols = isXl
-    ? inspectorInline
-      ? sidebarInline
-        ? "lg:grid-cols-[304px_minmax(0,1fr)_352px]"
-        : "lg:grid-cols-[0px_minmax(0,1fr)_352px]"
+    ? sidebarInline && inspectorInline
+      ? "lg:grid-cols-[304px_minmax(0,1fr)_352px]"
       : sidebarInline
-        ? "lg:grid-cols-[304px_minmax(0,1fr)_0px]"
-        : "lg:grid-cols-[0px_minmax(0,1fr)_0px]"
+        ? "lg:grid-cols-[304px_minmax(0,1fr)]"
+        : inspectorInline
+          ? "lg:grid-cols-[minmax(0,1fr)_352px]"
+          : "lg:grid-cols-[minmax(0,1fr)]"
     : sidebarInline
       ? "lg:grid-cols-[304px_minmax(0,1fr)]"
-      : "lg:grid-cols-[0px_minmax(0,1fr)]";
+      : "lg:grid-cols-[minmax(0,1fr)]";
 
   return (
     <div className="grid h-[100dvh] w-screen grid-rows-[auto_auto_minmax(0,1fr)] gap-2 bg-[var(--frame)] p-2">
@@ -129,8 +129,10 @@ function Shell() {
         unsaved={dirty}
         sidebarInline={sidebarInline}
         inspectorInline={inspectorInline}
-        onToggleSidebar={() => setSidebarCollapsed(true)}
-        onToggleInspector={() => setInspectorCollapsed(true)}
+        sidebarCanInline={isLg}
+        inspectorCanInline={isXl}
+        onToggleSidebar={() => setSidebarCollapsed((v) => !v)}
+        onToggleInspector={() => setInspectorCollapsed((v) => !v)}
         onOpenSidebarSheet={() => setSidebarSheet(true)}
         onOpenInspectorSheet={() => setInspectorSheet(true)}
         onOpenHelp={() => setHelpOpen(true)}
@@ -152,7 +154,7 @@ function Shell() {
           </aside>
         )}
 
-        <main className="relative col-start-1 min-h-0 lg:col-start-auto">
+        <main className="relative min-h-0">
           <Workspace />
         </main>
 

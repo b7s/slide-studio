@@ -43,7 +43,7 @@ export default function LeftPanel({ slides, selectedFile, onSelect, count }) {
 
   return (
     <div
-      className="flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--sidebar)] p-4 shadow-sm"
+      className="flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--sidebar)] p-4"
       onKeyDown={onKeyDown}
     >
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -82,14 +82,14 @@ export default function LeftPanel({ slides, selectedFile, onSelect, count }) {
                      type="button"
                      onClick={() => onSelect(slide.file)}
                      aria-current={active ? "true" : undefined}
-                     className={[
-                       "flex w-full items-stretch gap-3 rounded-xl border p-2 text-left transition",
-                       active
-                         ? "border-[var(--gold)] bg-[var(--accent)] shadow-[0_0_0_1px_var(--gold)]"
-                         : "border-[var(--border)] bg-[var(--card)] hover:bg-white hover:shadow-sm",
-                     ].join(" ")}
+                      className={[
+                        "flex w-full items-stretch gap-3 rounded-xl border p-2 text-left transition",
+                        active
+                          ? "border-[var(--gold)] bg-[var(--accent)]"
+                          : "border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)]",
+                      ].join(" ")}
                    >
-                     <span className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-md bg-[var(--navy)] shadow-sm">
+                      <span className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-md bg-[var(--navy)]">
                        <span className="absolute left-1 top-1 rounded bg-[var(--navy)]/80 px-1 text-[10px] font-bold text-white">
                          {slide.number}
                        </span>
