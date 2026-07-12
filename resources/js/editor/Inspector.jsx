@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, createElement } from "react";
 import { Button } from "../Components/ui/button";
 import { Input } from "../Components/ui/input";
 import { Label } from "../Components/ui/label";
@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { useEditor } from "./EditorContext";
 import { __ } from "../lib/i18n";
-import { ICON_CATALOG } from "./slideEditor";
+import { ICON_CATALOG } from "./icons.config";
 
 const FONTS = ["Inter", "Georgia", "Roboto", "Arial", "Times New Roman", "Courier New"];
 
@@ -239,6 +239,8 @@ export default function Inspector() {
               <div className="grid grid-cols-6 gap-1.5">
                 {Object.keys(ICON_CATALOG).map((name) => {
                   const active = s?.icon?.name === name;
+                  const entry = ICON_CATALOG[name];
+                  const segments = entry.entries ?? [{ tag: entry.tag, attrs: entry.attrs }];
                   return (
                     <button
                       key={name}
@@ -266,7 +268,11 @@ export default function Inspector() {
                         strokeLinejoin="round"
                         aria-hidden
                       >
-                        <path d={ICON_CATALOG[name]} />
+                        {segments.map((seg, i) => {
+                          const { key, ...rest } = seg.attrs;
+                          void key; // lucide-only HOC key, irrelevant at runtime
+                          return createElement(seg.tag, { key: i, ...rest });
+                        })}
                       </svg>
                     </button>
                   );

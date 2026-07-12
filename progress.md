@@ -152,7 +152,7 @@ Implemented under `routes/api.php` with the `/api/v1` prefix (skill mandate: ver
 - [x] **Color & background**: text color, fill color (color input + hex), gradient/image field (writes `background` shorthand).
 - [x] **Shape**: border radius, border width, border style, border color, box-shadow.
 - [x] **Media**: image src input, object-fit cover/contain.
-- [x] **Icon**: add/remove inline SVG icon inside selected element. Reported via `selection.icon = { name, size }`; engine methods `cmd.setIcon(name)`, `cmd.removeIcon()`, `cmd.setIconSize(px)`. Inspector section renders a 6-column palette (18 icons from `ICON_CATALOG`), size number field + Remove button. Icons rendered with `currentColor` stroke; sized in `width`/`height` attrs.
+- [x] **Icon**: add/remove inline SVG icon inside selected element. Reported via `selection.icon = { name, size }`; engine methods `cmd.setIcon(name)`, `cmd.removeIcon()`, `cmd.setIconSize(px)`. Inspector section renders a 6-column palette (18 icons from `ICON_CATALOG`), size number field + Remove button. Icons rendered with `currentColor` stroke; sized in `width`/`height` attrs. **Path sources are auto-generated from the installed `lucide-react` package** by `scripts/icons.mjs` into `resources/js/editor/icons.config.js` — single source of truth; never hand-edit icon paths (see AGENTS.md).
 - [ ] **Table**: detect table cell selection; add/remove rows/cols; move row/col; row-height & col-width fields (deferred).
 - [x] **Actions**: group/ungroup, make absolute, clear formatting.
 - [x] **Clear formatting**: strip inline styles on selected element.

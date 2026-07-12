@@ -4,7 +4,9 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
-        "dev": "vite"
+        "dev": "vite",
+        "icons": "node scripts/icons.mjs",
+        "icons:check": "node scripts/icons.mjs --check"
     },
     "devDependencies": {
         "@radix-ui/react-accordion": "^1.2.16",
