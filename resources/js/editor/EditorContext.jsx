@@ -365,6 +365,8 @@ html,body{width:100%;min-height:100dvh;background:#0d1b2a;display:flex;align-ite
       setIconSize: run("setIconSize"),
       applyTextCommand: run("applyTextCommand"),
       setTextColor: run("setTextColor"),
+      saveSelection: run("saveSelection"),
+      restoreSelection: run("restoreSelection"),
       applyList: run("applyList"),
       beginTextEdit: run("beginTextEdit"),
       exitTextEdit: run("exitTextEdit"),
