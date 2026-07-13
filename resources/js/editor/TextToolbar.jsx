@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Bold, Italic, List, ListOrdered, Palette, Trash2 } from "lucide-react";
 import { Button } from "../Components/ui/button";
 import { Tooltip, TooltipTrigger, TooltipContent } from "../Components/ui/tooltip";
@@ -31,28 +31,8 @@ const LIST_OPTIONS = [
 export default function TextToolbar({ style, selection, cmd }) {
   const [colorOpen, setColorOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
-  // The shadow contenteditable keeps its text selection only while focused.
-  // Opening a Radix popover steals focus, so we snapshot the Range on the
-  // trigger's mousedown and restore it just before applying the choice.
-  const savedRange = useRef(null);
 
   const pd = (e) => e.preventDefault();
-
-  const saveRange = () => {
-    const sel = window.getSelection();
-    const box = cmd.getSelected();
-    if (!sel || !sel.rangeCount || !box) return;
-    const r = sel.getRangeAt(0);
-    if (box.contains(r.commonAncestorContainer)) savedRange.current = r.cloneRange();
-  };
-
-  const restoreRange = () => {
-    const sel = window.getSelection();
-    if (savedRange.current && sel) {
-      sel.removeAllRanges();
-      sel.addRange(savedRange.current);
-    }
-  };
 
   const currentColor = toHex(selection?.styles?.color || "");
   const currentList = (() => {
@@ -63,13 +43,13 @@ export default function TextToolbar({ style, selection, cmd }) {
   })();
 
   const handleColor = (c) => {
-    restoreRange();
+    cmd.restoreSelection();
     cmd.setTextColor(c);
     setColorOpen(false);
   };
 
   const handleList = (k) => {
-    restoreRange();
+    cmd.restoreSelection();
     cmd.applyList(k);
     setListOpen(false);
   };
@@ -113,7 +93,7 @@ export default function TextToolbar({ style, selection, cmd }) {
               className={cn("tool-icon", currentList && "text-[var(--gold-strong)]")}
               onMouseDown={(e) => {
                 pd(e);
-                saveRange();
+                cmd.saveSelection();
               }}
             >
               {currentList === "ordered" ? <ListOrdered /> : <List />}
@@ -152,7 +132,7 @@ export default function TextToolbar({ style, selection, cmd }) {
             className="tool-icon relative"
             onMouseDown={(e) => {
               pd(e);
-              saveRange();
+              cmd.saveSelection();
             }}
           >
             <Palette />

@@ -20,6 +20,8 @@ function makeCmd(overrides = {}) {
     applyTextCommand: vi.fn(),
     setTextColor: vi.fn(),
     applyList: vi.fn(),
+    saveSelection: vi.fn(),
+    restoreSelection: vi.fn(),
     remove: vi.fn(),
     ...overrides,
   };

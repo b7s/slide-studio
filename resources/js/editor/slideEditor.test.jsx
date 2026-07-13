@@ -136,3 +136,52 @@ describe("slideEditor.duplicate", () => {
     engine.destroy();
   });
 });
+
+describe("slideEditor.setTextColor", () => {
+  it("colors the whole box when no text is selected", () => {
+    document.execCommand = vi.fn();
+    const { root, a } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.select(a);
+    engine.beginTextEdit();
+    engine.setTextColor("#e11d48");
+
+    // No in-box selection → the colour is applied to the entire box.
+    expect(a.style.color).not.toBe("");
+
+    engine.destroy();
+  });
+
+  it("colors only the selected text when a range is active", () => {
+    document.execCommand = vi.fn();
+    const { root, a } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    // Drive the document selection directly: jsdom's Selection.addRange does not
+    // register the range, so we return a non-collapsed in-box range instead.
+    const selStub = {
+      isCollapsed: false,
+      anchorNode: a,
+      rangeCount: 1,
+      removeAllRanges: vi.fn(),
+      addRange: vi.fn(),
+      getRangeAt: () => ({ commonAncestorContainer: a, cloneRange: () => ({ commonAncestorContainer: a }) }),
+    };
+    const realGetSelection = window.getSelection;
+    window.getSelection = () => selStub;
+
+    engine.select(a);
+    engine.beginTextEdit();
+    engine.saveSelection();
+    engine.setTextColor("#22c55e");
+
+    // With an active selection the whole-box style.color must stay empty — the
+    // colour is directed at the selection via execCommand('foreColor').
+    expect(a.style.color).toBe("");
+    expect(document.execCommand).toHaveBeenCalledWith("foreColor", false, "#22c55e");
+
+    window.getSelection = realGetSelection;
+    engine.destroy();
+  });
+});

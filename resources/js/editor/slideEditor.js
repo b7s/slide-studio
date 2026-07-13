@@ -376,6 +376,28 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     }
   }
 
+  // The floating toolbar lives in the light DOM and Radix portals its popovers
+  // to <body>, so opening one steals focus from the edited box and drops the
+  // in-box text selection. We snapshot the Range on the trigger's mousedown and
+  // restore it just before applying a command, so colours/lists target the
+  // originally selected text rather than collapsing to a caret.
+  let savedRange = null;
+
+  function saveSelection() {
+    const sel = typeof window !== "undefined" ? window.getSelection() : null;
+    if (!sel || !sel.rangeCount || !selected) return;
+    const r = sel.getRangeAt(0);
+    if (selected.contains(r.commonAncestorContainer)) savedRange = r.cloneRange();
+  }
+
+  function restoreSelection() {
+    const sel = typeof window !== "undefined" ? window.getSelection() : null;
+    if (savedRange && sel) {
+      sel.removeAllRanges();
+      sel.addRange(savedRange);
+    }
+  }
+
   // Enter per-box text editing (double-click / F2). Makes the box contenteditable
   // and drops the caret at the end of its text so the user can keep typing.
   function beginTextEdit() {
@@ -655,10 +677,13 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   // but the box is active, to the whole box). Mirrors PowerPoint's behaviour.
   function setTextColor(color) {
     if (!selected || !isTextEditable(selected)) return;
-    const sel = typeof window !== "undefined" ? window.getSelection() : null;
-    const hasSel = sel && !sel.isCollapsed && selected.contains(sel.anchorNode);
     selected.setAttribute("contenteditable", "true");
     selected.focus();
+    // Restore the snapshot AFTER focusing so the in-box selection is active when
+    // execCommand runs; focusing a box collapses any pre-existing range.
+    restoreSelection();
+    const sel = typeof window !== "undefined" ? window.getSelection() : null;
+    const hasSel = sel && !sel.isCollapsed && selected.contains(sel.anchorNode);
     if (hasSel) {
       document.execCommand("styleWithCSS", false, true);
       document.execCommand("foreColor", false, color);
@@ -1350,6 +1375,8 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     setStyles,
     applyTextCommand,
     setTextColor,
+    saveSelection,
+    restoreSelection,
     applyList,
     nudge,
     remove,
