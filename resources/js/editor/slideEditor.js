@@ -66,6 +66,16 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   const slideRoot = () =>
     root.querySelector("[data-slide], .slide, .slide-root") || root.firstElementChild || root;
 
+  // The slide content lives inside an open Shadow DOM root (see SlideCanvas).
+  // Its text selection must be read/modified through the shadow root's own
+  // Selection — `window.getSelection()` can reject ranges whose boundary nodes
+  // live in a shadow tree (throwing on addRange), which would abort colour/list
+  // commands. Fall back to window when the shadow root has no getSelection.
+  function getSelection() {
+    if (root && typeof root.getSelection === "function") return root.getSelection();
+    return typeof window !== "undefined" ? window.getSelection() : null;
+  }
+
   // Serialise only the slide content (the `.slide` root's inner HTML),
   // never the whole shadow root. The shadow root also hosts the injected
   // base <style> and the transient selection overlay — those must never be
@@ -384,17 +394,22 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   let savedRange = null;
 
   function saveSelection() {
-    const sel = typeof window !== "undefined" ? window.getSelection() : null;
+    const sel = getSelection();
     if (!sel || !sel.rangeCount || !selected) return;
     const r = sel.getRangeAt(0);
     if (selected.contains(r.commonAncestorContainer)) savedRange = r.cloneRange();
   }
 
   function restoreSelection() {
-    const sel = typeof window !== "undefined" ? window.getSelection() : null;
+    const sel = getSelection();
     if (savedRange && sel) {
-      sel.removeAllRanges();
-      sel.addRange(savedRange);
+      try {
+        sel.removeAllRanges();
+        sel.addRange(savedRange);
+      } catch {
+        // Ranges in a shadow tree may be rejected by some engines; the colour
+        // command then falls back to the whole box.
+      }
     }
   }
 
@@ -682,7 +697,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     // Restore the snapshot AFTER focusing so the in-box selection is active when
     // execCommand runs; focusing a box collapses any pre-existing range.
     restoreSelection();
-    const sel = typeof window !== "undefined" ? window.getSelection() : null;
+    const sel = getSelection();
     const hasSel = sel && !sel.isCollapsed && selected.contains(sel.anchorNode);
     if (hasSel) {
       document.execCommand("styleWithCSS", false, true);
