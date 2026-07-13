@@ -24,9 +24,9 @@ export default function Login({ errors, status }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[var(--frame)] p-4">
       <Head title={__("messages.auth.login_title")} />
-      <div className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8">
+      <div className="auth-card">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 grid size-10 place-items-center rounded-lg bg-gradient-to-br from-[#16283a] to-[#0a141d]">
+          <div className="mx-auto mb-3 brand-icon size-10">
             <span className="text-sm font-bold text-white">{app.short}</span>
           </div>
           <h1 className="text-xl font-semibold">{app.name}</h1>
