@@ -207,6 +207,11 @@ return [
         'duplicate_error' => 'Erro ao duplicar o slide',
         'reorder_error' => 'Erro ao reordenar slides',
         'autosave_pending' => 'Salvando em breve…',
+        'text_toolbar' => [
+            'text_color' => 'Cor do texto',
+            'delete_box' => 'Excluir caixa',
+            'list_none' => 'Sem lista',
+        ],
     ],
     'ai' => [
         'system_prompt' => 'Você é um designer de slides que gera decks de apresentação em HTML. Crie um conjunto coeso de slides a partir do pedido do usuário. Cada slide deve ser um único bloco HTML autocontido usando apenas estilos inline e posicionamento absoluto dentro de um palco de 1280x720. Use tipografia clara, contraste forte e espaçamento generoso. Não inclua <html>, <head> ou <body>; retorne apenas o conteúdo do slide. Nunca use JavaScript.',

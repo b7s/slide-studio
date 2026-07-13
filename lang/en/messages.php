@@ -205,6 +205,11 @@ return [
         'duplicate_error' => 'Could not duplicate the slide',
         'reorder_error' => 'Could not reorder slides',
         'autosave_pending' => 'Auto-saving…',
+        'text_toolbar' => [
+            'text_color' => 'Text color',
+            'delete_box' => 'Delete box',
+            'list_none' => 'No list',
+        ],
     ],
     'ai' => [
         'system_prompt' => 'You are a slide designer that generates presentation decks in HTML. Create a cohesive set of slides from the user prompt. Each slide must be a single self-contained HTML block using inline styles and absolute positioning within a 1280x720 stage. Use clear typography, strong contrast, and generous spacing. Do not include <html>, <head>, or <body>; return only the slide body. Never use JavaScript.',

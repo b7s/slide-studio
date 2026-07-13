@@ -17,6 +17,7 @@ const HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 // change the catalog, update the ICONS whitelist in `scripts/icons.mjs`
 // (or bump `lucide-react` in `package.json`) and re-run `npm run icons`.
 import { ICON_CATALOG } from "./icons.config";
+import { applyListToElement } from "./listFormat";
 
 function num(v) {
   const n = parseFloat(v);
@@ -46,10 +47,16 @@ function parseBox(el) {
   };
 }
 
-export function createSlideEditor({ root, onChange, onSelection, onEditingChange, onContextMenu }) {
+export function createSlideEditor({ root, onChange, onSelection, onEditingChange, onTextEditingChange, onContextMenu }) {
   let selected = null;
   let editing = false;
+  let textEditing = false;
+  // Remembers the cursor each box had before we forced the I-beam during a
+  // text-edit session, so it can be fully restored on exit (and never leaked
+  // into the saved HTML).
+  const editPrevCursor = new WeakMap();
   let overlay = null;
+  let hoverLayer = null;
   let history = [];
   let histIndex = -1;
   let clipboard = null;
@@ -64,7 +71,23 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   // base <style> and the transient selection overlay — those must never be
   // persisted into the saved slide HTML.
   function snapshot() {
-    return slideRoot().innerHTML;
+    // Never persist editor-only chrome. A box can be left with
+    // `contenteditable="true"` (during text edit, after a command, or right
+    // after insert) and a hover outline may still be applied; saving those
+    // would make the box reload as editable (with a focus/selection border) or
+    // outlined. Strip them from a clone so the stored HTML is clean.
+    clearHoverOutlines();
+    // Also drop the transient I-beam cursor we force during text editing,
+    // restoring the box's original cursor while we snapshot.
+    let editCursor = null;
+    if (textEditing && selected && editPrevCursor.has(selected)) {
+      editCursor = selected.style.cursor;
+      selected.style.cursor = editPrevCursor.get(selected);
+    }
+    const clone = slideRoot().cloneNode(true);
+    clone.querySelectorAll("[contenteditable]").forEach((n) => n.removeAttribute("contenteditable"));
+    if (editCursor !== null) selected.style.cursor = editCursor;
+    return clone.innerHTML;
   }
 
   function pushHistory() {
@@ -152,7 +175,14 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   function isTextEditable(el) {
     if (!el) return false;
     const tag = el.tagName.toLowerCase();
-    return ["p", "span", "h1", "h2", "h3", "h4", "h5", "h6", "li", "a", "div", "td", "th", "button"].includes(tag);
+    // Includes common inline formatting tags (b/i/strong/em/u/...) so a box
+    // whose text is wrapped in those tags is still treated as an editable text
+    // box (and the floating toolbar works on it).
+    return [
+      "p", "span", "h1", "h2", "h3", "h4", "h5", "h6", "li", "a", "div",
+      "td", "th", "button", "b", "i", "strong", "em", "u", "small", "code",
+      "mark", "label", "blockquote", "pre",
+    ].includes(tag);
   }
 
   function isCell(el) {
@@ -294,6 +324,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
       handle.style.left = `${hx - 5}px`;
       handle.style.top = `${hy - 5}px`;
     });
+    if (onTextEditingChange) updateToolbar();
   }
 
   function handleXY(pos, w, h) {
@@ -309,27 +340,104 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     return [0, midY];
   }
 
+  // The floating text toolbar is visible whenever a text box is selected while
+  // in edit mode, OR while an explicit text-edit session is active (F2 / double
+  // click). It is positioned from the selected element's viewport rect and
+  // re-emitted on box movement so it stays glued.
+  function textRect() {
+    if (!selected) return null;
+    const r = selected.getBoundingClientRect();
+    return { left: r.left, top: r.top, width: r.width, height: r.height };
+  }
+
+  // The floating quickbar shows only while a box is in an explicit text-edit
+  // session (double-click / F2) — never merely on selection. Single-click just
+  // selects + moves the box; double-click dives into editing.
+  function toolbarVisible() {
+    return textEditing;
+  }
+
+  function updateToolbar() {
+    const visible = toolbarVisible();
+    if (onTextEditingChange) onTextEditingChange(visible, visible ? textRect() : null);
+  }
+
+  // Collapse the caret to the end of an element's text so the user can keep
+  // typing after entering edit mode (rather than at the start or a selected word).
+  function placeCaretAtEnd(el) {
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    const sel = typeof window !== "undefined" ? window.getSelection() : null;
+    if (sel) {
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  }
+
+  // Enter per-box text editing (double-click / F2). Makes the box contenteditable
+  // and drops the caret at the end of its text so the user can keep typing.
+  function beginTextEdit() {
+    const box = topEditable(selected) || selected;
+    if (!box || !isTextEditable(box)) return;
+    // Promote the selection to the containing box (if we were on a nested leaf)
+    // so the overlay and floating toolbar target the whole box.
+    if (box !== selected) select(box);
+    textEditing = true;
+    if (!editing) selected.setAttribute("contenteditable", "true");
+    // Show the I-beam cursor while editing text (a draggable box may carry
+    // cursor:move); remember the original so we can restore it on exit.
+    if (selected.style.cursor !== "text") {
+      editPrevCursor.set(selected, selected.style.cursor || "");
+      selected.style.cursor = "text";
+    }
+    placeCaretAtEnd(selected);
+    updateToolbar();
+    positionOverlay();
+  }
+
+  function exitTextEdit() {
+    if (!textEditing) return;
+    textEditing = false;
+    if (selected && !editing) selected.setAttribute("contenteditable", "false");
+    // Restore the original cursor (e.g. move) we overrode with the I-beam.
+    if (selected && editPrevCursor.has(selected)) {
+      selected.style.cursor = editPrevCursor.get(selected);
+      editPrevCursor.delete(selected);
+    }
+    updateToolbar();
+  }
+
   function select(el) {
     if (!el || el === root || el === slideRoot() || el.getAttribute("data-slide-overlay") !== null) {
       clearSelection();
       return;
     }
+    // Switching to a different element drops any explicit text-edit session so
+    // the floating toolbar hides instead of sticking to the wrong box.
+    if (selected && selected !== el && textEditing) exitTextEdit();
     selected = el;
     clearHoverOutlines();
     if (overlay) overlay.style.display = "block";
     else overlay = buildOverlay();
     updateOverlayColor();
+    // In edit mode every box is directly editable: the toolbar shows on
+    // selection and the box becomes contenteditable + focused for direct typing.
     if (editing) setEditable(true);
     positionOverlay();
     selectionInfo();
+    updateToolbar();
   }
 
   function clearSelection() {
     if (selected && editing) setEditable(false);
+    if (textEditing) exitTextEdit();
     selected = null;
     clearHoverOutlines();
     if (overlay) overlay.style.display = "none";
     onSelection(null);
+    updateToolbar();
   }
 
   function setEditable(on) {
@@ -342,6 +450,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     editing = on;
     onEditingChange(on);
     if (selected) setEditable(on);
+    updateToolbar();
   }
 
   // ---- pointer interactions (drag + resize) ----
@@ -349,6 +458,11 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   // interaction style — we remember the previous inline value so it can be
   // restored on pointer-up and never leaks into the saved HTML.
   function beginDrag(e) {
+    // Only explicitly-positioned boxes are draggable. Flow/inline elements
+    // (e.g. a <b>/<span> selected for text editing) have no left/top of their
+    // own, so turning them into an absolute box on drag would teleport them to
+    // the parent's origin. Leave those alone — they're edited, not moved.
+    if (!selected.style.left && !selected.style.top) return;
     const sel = window.getSelection && window.getSelection();
     if (sel) sel.removeAllRanges();
     const prevUserSelect = selected.style.userSelect;
@@ -408,6 +522,11 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
       };
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp);
+      return;
+    }
+    // While a box is in an explicit text-edit session, clicks inside it must
+    // only place the caret — never start a drag (which would move the box).
+    if (selected && textEditing && (e.target === selected || (selected.contains && selected.contains(e.target)))) {
       return;
     }
     if (selected && (e.target === selected || (selected.contains && selected.contains(e.target)))) {
@@ -529,6 +648,38 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     if (overlay) overlay.style.display = "none";
     onSelection(null);
     pushHistory();
+    emit();
+  }
+
+  // Apply a text colour to the current selection (or, when nothing is selected
+  // but the box is active, to the whole box). Mirrors PowerPoint's behaviour.
+  function setTextColor(color) {
+    if (!selected || !isTextEditable(selected)) return;
+    const sel = typeof window !== "undefined" ? window.getSelection() : null;
+    const hasSel = sel && !sel.isCollapsed && selected.contains(sel.anchorNode);
+    selected.setAttribute("contenteditable", "true");
+    selected.focus();
+    if (hasSel) {
+      document.execCommand("styleWithCSS", false, true);
+      document.execCommand("foreColor", false, color);
+    } else {
+      selected.style.color = color;
+    }
+    pushHistory();
+    selectionInfo();
+    positionOverlay();
+    emit();
+  }
+
+  // Toggle/convert the box's list to `kind` (see listFormat.applyListToElement).
+  function applyList(kind) {
+    if (!selected || !isTextEditable(selected)) return;
+    selected.setAttribute("contenteditable", "true");
+    selected.focus();
+    applyListToElement(selected, kind);
+    pushHistory();
+    selectionInfo();
+    positionOverlay();
     emit();
   }
 
@@ -711,11 +862,13 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
 
   function duplicate() {
     if (!selected) return;
-    copy();
-    paste();
-    const nodes = (selected || slideRoot()).children;
-    const node = nodes[nodes.length - 1];
-    if (node) select(node);
+    // Clone as a true sibling (not nested via paste) so the new box sits next to
+    // the original, then move the selection to the fresh copy.
+    const clone = selected.cloneNode(true);
+    selected.parentNode.insertBefore(clone, selected.nextSibling);
+    select(clone);
+    pushHistory();
+    emit();
   }
 
   // ---- table operations (only meaningful on a selected <td>/<th>) ----
@@ -937,7 +1090,40 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   function onDocClick(e) {
     if (e.target === overlay) return;
     if (e.target.getAttribute && e.target.getAttribute("data-slide-handle")) return;
-    select(e.target);
+    // Select the whole box, not a nested child, so the overlay frames the box
+    // and text editing targets it (not a tiny inner leaf).
+    select(topEditable(e.target) || e.target);
+  }
+
+  // Double-click a text element to dive straight into editing it — the floating
+  // text toolbar then appears above the box.
+  function onDocDblClick(e) {
+    let target = topEditable(e.target) || e.target;
+    // If we're already editing this box, let the browser's native double-click
+    // select the word so the user can style it (bold/italic/color). Don't
+    // hijack it with a caret-at-end reset, which would wipe the selection.
+    if (textEditing && selected && (target === selected || (selected.contains && selected.contains(target)))) {
+      return;
+    }
+    // On a small box the second click of a double-click can land on a resize
+    // handle (or inside the already-selected box); in both cases we should edit
+    // the currently selected box rather than bail out or start a resize.
+    if (
+      selected &&
+      isTextEditable(selected) &&
+      ((target.getAttribute && target.getAttribute("data-slide-handle") !== null) ||
+        target === selected ||
+        (selected.contains && selected.contains(target)))
+    ) {
+      target = selected;
+    }
+    if (!isTextEditable(target)) return;
+    // Stop the browser's native "select the word" default — otherwise it
+    // overrides our caret-at-end placement and the box isn't ready to type
+    // until the user clicks once more.
+    e.preventDefault();
+    if (target !== selected) select(target);
+    beginTextEdit();
   }
 
   function onContextMenu(e) {
@@ -958,10 +1144,24 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     }
   }
 
-  function onDocBlur() {
+  function onDocBlur(e) {
     if (!selected) return;
+    // Clicking the floating text toolbar blurs the box, but the toolbar keeps
+    // the box focused via mousedown preventDefault. Guard anyway: if focus
+    // jumped to the toolbar, keep the edit session alive so its buttons still
+    // apply to the box instead of hiding the toolbar.
+    if (e && e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest("[data-text-toolbar]")) {
+      return;
+    }
     const editable = editing || selected.getAttribute("contenteditable") === "true";
-    if (editable) pushHistory();
+    if (editable) {
+      pushHistory();
+      // Leaving the box ends an explicit text-edit session: hide the floating
+      // toolbar AND drop contenteditable (unless we're in global edit mode,
+      // where boxes stay editable). Without this the box would keep
+      // contenteditable="true" after losing focus.
+      if (textEditing && !editing) exitTextEdit();
+    }
   }
 
   function onScrollOrResize() {
@@ -979,48 +1179,96 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     return n;
   }
 
+  // A "box" is positioned on the slide via explicit inline left/top styles.
+  // Wrapper divs inside a box are not, so they shouldn't be promoted to edit
+  // targets on their own.
+  function isPositioned(el) {
+    if (!el || !el.style) return false;
+    return el.style.left !== "" && el.style.top !== "";
+  }
+
+  // Resolve the node to edit: walk up from a (possibly nested) element to the
+  // nearest editable box. We stop at table cells (they edit locally) and at the
+  // nearest positioned box (so group children stay local and we don't promote a
+  // click on nested text up to the whole slide). Falls back to the top-level box
+  // directly under the slide root. Fixes the case where double-clicking nested
+  // HTML (e.g. <div><div><span>text</span></div></div>) left only the tiny inner
+  // leaf editable with no active caret.
+  function topEditable(el) {
+    if (!el || el === slideRoot()) return null;
+    let n = el;
+    while (n && n !== slideRoot()) {
+      if (isCell(n)) return n;
+      const parent = n.parentElement;
+      if (!parent || parent === slideRoot()) return n;
+      if (isPositioned(n)) return n;
+      n = parent;
+    }
+    return n;
+  }
+
   // ---- hover indicator: dotted outline on the element under the cursor AND on
   // its top-level parent box, so the user can see every selectable item. ----
+  // The indicator is drawn in a dedicated overlay layer — never as an inline
+  // style on the slide element — so transient chrome can never leak into the
+  // snapshot and get saved as real content.
   let hoverLeaf = null;
   let hoverBox = null;
-  // Remember every inline style the hover indicator overwrites so it can be
-  // fully restored — otherwise transient chrome (outline, outline-offset,
-  // border-radius) leaks into the snapshot and gets saved as real content.
-  const hoverPrev = new WeakMap();
 
-  function restoreHover(el) {
-    if (!el || !el.style) return;
-    const prev = hoverPrev.get(el) || {};
-    el.style.outline = prev.outline ?? "";
-    el.style.outlineOffset = prev.outlineOffset ?? "";
-    el.style.borderRadius = prev.borderRadius ?? "";
+  function buildHoverLayer() {
+    const layer = document.createElement("div");
+    layer.setAttribute("data-slide-hover", "1");
+    layer.style.position = "absolute";
+    layer.style.inset = "0";
+    layer.style.pointerEvents = "none";
+    layer.style.zIndex = "2147483645";
+    ["leaf", "box"].forEach((kind) => {
+      const el = document.createElement("div");
+      el.setAttribute(`data-slide-hover-${kind}`, "1");
+      el.style.position = "absolute";
+      el.style.boxSizing = "border-box";
+      el.style.pointerEvents = "none";
+      el.style.borderRadius = "3px";
+      el.style.display = "none";
+      layer.appendChild(el);
+    });
+    root.appendChild(layer);
+    return layer;
+  }
+
+  function positionHover(target, el) {
+    if (!target || target === selected) return;
+    const c = contrastColor(target);
+    el.style.border = `2px dotted ${c}`;
+    const r = target.getBoundingClientRect();
+    const host = root.host ?? root;
+    const sr = host.getBoundingClientRect();
+    const scale = sr.width > 0 ? sr.width / Math.max(1, host.offsetWidth) : 1;
+    el.style.left = `${(r.left - sr.left) / scale}px`;
+    el.style.top = `${(r.top - sr.top) / scale}px`;
+    el.style.width = `${r.width / scale}px`;
+    el.style.height = `${r.height / scale}px`;
+    el.style.display = "block";
   }
 
   function clearHoverOutlines() {
-    restoreHover(hoverLeaf);
-    if (hoverBox !== hoverLeaf) restoreHover(hoverBox);
     hoverLeaf = null;
     hoverBox = null;
-  }
-
-  function applyHoverOutline(el) {
-    if (!el || el === selected) return;
-    if (!hoverPrev.has(el)) {
-      hoverPrev.set(el, {
-        outline: el.style.outline,
-        outlineOffset: el.style.outlineOffset,
-        borderRadius: el.style.borderRadius,
-      });
-    }
-    el.style.outline = `2px dotted ${contrastColor(el)}`;
-    el.style.outlineOffset = "1px";
-    el.style.borderRadius = "3px";
+    if (!hoverLayer) return;
+    hoverLayer.querySelectorAll("[data-slide-hover-leaf], [data-slide-hover-box]").forEach((el) => {
+      el.style.display = "none";
+    });
   }
 
   function onPointerMoveHover(e) {
     if (drag || resize) return;
     const t = e.target;
-    if (!t || t === root || t === slideRoot() || (t.getAttribute && t.getAttribute("data-slide-overlay"))) {
+    if (
+      !t ||
+      t === root ||
+      t === slideRoot() ||
+      (t.getAttribute && (t.getAttribute("data-slide-overlay") || t.getAttribute("data-slide-hover")))
+    ) {
       clearHoverOutlines();
       return;
     }
@@ -1032,8 +1280,9 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     const box = topBox(t);
     if (t === hoverLeaf && box === hoverBox) return; // no change since last move
     clearHoverOutlines();
-    applyHoverOutline(t);
-    applyHoverOutline(box);
+    if (!hoverLayer) hoverLayer = buildHoverLayer();
+    positionHover(t, hoverLayer.querySelector("[data-slide-hover-leaf]"));
+    positionHover(box, hoverLayer.querySelector("[data-slide-hover-box]"));
     hoverLeaf = t;
     hoverBox = box;
   }
@@ -1047,6 +1296,11 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     if (!selected) return;
     const path = e.composedPath();
     if (path.includes(root.host) || path.includes(overlay)) return;
+    // Clicks on the floating text toolbar (rendered in the light DOM, inside the
+    // stage) must not clear the selection — otherwise the toolbar vanishes and
+    // its buttons no-op. The toolbar already keeps the box focused via
+    // mousedown preventDefault, so we only need to skip the stage-clear here.
+    if (path.some((n) => n instanceof Element && n.hasAttribute("data-text-toolbar"))) return;
     const onStage = path.some(
       (n) => n instanceof Element && n.hasAttribute("data-stage")
     );
@@ -1054,6 +1308,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   }
 
   root.addEventListener("click", onDocClick, true);
+  root.addEventListener("dblclick", onDocDblClick, true);
   root.addEventListener("pointerdown", onPointerDown, true);
   root.addEventListener("contextmenu", onContextMenu, true);
   root.addEventListener("input", onDocInput, true);
@@ -1067,6 +1322,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
 
   function destroy() {
     root.removeEventListener("click", onDocClick, true);
+    root.removeEventListener("dblclick", onDocDblClick, true);
     root.removeEventListener("pointerdown", onPointerDown, true);
     root.removeEventListener("contextmenu", onContextMenu, true);
     root.removeEventListener("input", onDocInput, true);
@@ -1081,15 +1337,20 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     window.removeEventListener("pointermove", onPendingMove);
     window.removeEventListener("pointerup", onPendingUp);
     if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    if (hoverLayer && hoverLayer.parentNode) hoverLayer.parentNode.removeChild(hoverLayer);
   }
 
   return {
     select,
     clearSelection,
     setEditing,
+    beginTextEdit,
+    exitTextEdit,
     setStyle,
     setStyles,
     applyTextCommand,
+    setTextColor,
+    applyList,
     nudge,
     remove,
     bringForward: () => zStep(1),
@@ -1122,6 +1383,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     getSelected: () => selected,
     getIcon: findIcon,
     isEditing: () => editing,
+    isTextEditing: () => textEditing,
     isEditingText: () => !!(selected && (editing || selected.getAttribute("contenteditable") === "true")),
     destroy,
   };

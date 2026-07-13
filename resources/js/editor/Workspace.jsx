@@ -16,6 +16,7 @@ function IconTip({ label, children }) {
 }
 import SlideCanvas from "./SlideCanvas";
 import ContextMenu from "./ContextMenu";
+import TextToolbar from "./TextToolbar";
 import {
     Undo2,
     Redo2,
@@ -52,6 +53,7 @@ export default function Workspace() {
     statusKey,
     statusTone,
     selectedLabel,
+    selection,
     editMode,
     toggleEditMode,
     onHtmlChange,
@@ -81,6 +83,9 @@ export default function Workspace() {
   toggleSlideFullscreenRef.current = toggleSlideFullscreen;
   const [zoom, setZoom] = useState(100);
   const [menu, setMenu] = useState(null);
+  // Floating text toolbar: visible while a box is in text-edit mode. `rect` is
+  // the selected box's viewport rect (emitted by the engine on enter/move).
+  const [textToolbar, setTextToolbar] = useState({ active: false, rect: null });
 
   const readOnly = !(permissions?.canEdit ?? false);
 
@@ -131,6 +136,7 @@ export default function Workspace() {
         onChange: (h) => onHtmlChangeRef.current(h),
         onSelection: (info) => onSelectionRef.current(info),
         onEditingChange: () => {},
+        onTextEditingChange: (active, rect) => setTextToolbar({ active, rect }),
         onContextMenu: (x, y, hasSelection) => {
           setMenu({ x, y, hasSelection });
         },
@@ -170,6 +176,13 @@ export default function Workspace() {
         engine.redo();
         return;
       }
+      // F2 toggles text-edit mode on the selected box (PowerPoint-style).
+      if (e.key === "F2") {
+        e.preventDefault();
+        if (engine.isTextEditing()) engine.exitTextEdit();
+        else engine.beginTextEdit();
+        return;
+      }
       // Bail if the user is typing inside an editable element (contenteditable,
       // input, textarea). The browser handles native keys there.
       if (engine.isEditingText() || /^(input|textarea)$/i.test(e.target.tagName) || e.target.isContentEditable) {
@@ -194,6 +207,23 @@ export default function Workspace() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // Keep the floating text toolbar glued to its box while the stage scrolls or
+  // the window resizes (the engine only re-emits the rect on box movement).
+  useEffect(() => {
+    if (!textToolbar.active) return undefined;
+    const stage = stageRef.current;
+    const reposition = () => {
+      const el = engineRef.current?.getSelected();
+      if (el) setTextToolbar((t) => ({ ...t, rect: el.getBoundingClientRect() }));
+    };
+    stage?.addEventListener("scroll", reposition);
+    window.addEventListener("resize", reposition);
+    return () => {
+      stage?.removeEventListener("scroll", reposition);
+      window.removeEventListener("resize", reposition);
+    };
+  }, [textToolbar.active]);
 
   const statusIcon =
     statusTone === "error" ? (
@@ -231,7 +261,7 @@ export default function Workspace() {
         </button>
       )}
       {!slideFullscreen && (
-      <div className="pointer-events-none absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2">
+      <div className="pointer-events-none absolute inset-x-0 top-4 z-10 flex items-center justify-between px-4">
         <div className="toolbar-group">
           <IconTip label={__("messages.workspace.undo")}>
             <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.undo")} onClick={cmd.undo} className="tool-icon">
@@ -343,9 +373,25 @@ export default function Workspace() {
             html={html}
             frameWidth={FRAME_W}
             frameHeight={FRAME_H}
-            className="rounded-xl overflow-hidden shadow-2xl"
+            className="rounded-xl overflow-hidden border-1 border-gray-300 shadow-2xl"
           />
         </div>
+
+        {!slideFullscreen &&
+          textToolbar.active &&
+          (() => {
+            if (!textToolbar.rect || !stageRef.current) return null;
+            const stage = stageRef.current;
+            const sr = stage.getBoundingClientRect();
+            const x = textToolbar.rect.left - sr.left + stage.scrollLeft;
+            const y = textToolbar.rect.top - sr.top + stage.scrollTop;
+            const above = y > 64;
+            const style = {
+              left: Math.max(8, x),
+              top: above ? y - 56 : y + textToolbar.rect.height + 12,
+            };
+            return <TextToolbar style={style} selection={selection} cmd={cmd} />;
+          })()}
       </div>
 
       {!slideFullscreen && (

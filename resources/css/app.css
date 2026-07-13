@@ -193,6 +193,7 @@
   /* ───── Selection path label (status bar) ───── */
   .toolbar-label {
     @apply min-w-0 flex-1 truncate text-xs text-[var(--muted-foreground)];
+      cursor: default;
   }
 
   /* ───── Vertical separator ───── */
@@ -218,7 +219,7 @@
 
   /* ───── Slide list item ───── */
   .slide-item {
-    @apply flex w-full items-stretch gap-3 rounded-xl border p-2 text-left transition;
+    @apply flex w-full items-stretch gap-3 rounded-xl p-2 text-left transition;
   }
 
   /* ───── Auth card ───── */
@@ -246,7 +247,7 @@
 
   /* ───── Accordion item ───── */
   .accordion-item {
-    @apply rounded-xl border border-[var(--border)] bg-[var(--card)];
+    @apply rounded-xl bg-[var(--card)];
   }
 
   /* ───── Inline icon inside status bar style ───── */

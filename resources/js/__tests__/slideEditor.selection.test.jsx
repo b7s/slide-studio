@@ -45,18 +45,25 @@ describe("slideEditor selection vs. edits", () => {
     root.remove();
   });
 
-  it("restores hover chrome so outline-offset never leaks into content", () => {
+  it("draws the hover indicator in an overlay so it never leaks into content", () => {
     const root = mount();
     const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
     const el = box(root);
 
-    // Hover the element (applies the dotted indicator + outline-offset)…
+    // Hover the element — the dotted indicator is drawn in a dedicated overlay
+    // layer, never as an inline style on the slide element itself.
     pointer("pointermove", el, { clientX: 120, clientY: 60 });
-    // …then move onto the slide stage, which clears the hover indicator.
-    pointer("pointermove", root.querySelector(".slide"), { clientX: 5, clientY: 5 });
 
-    expect(el.style.outlineOffset).toBe("");
-    expect(el.getAttribute("style") || "").not.toContain("outline-offset");
+    const layer = root.querySelector("[data-slide-hover]");
+    expect(layer).not.toBeNull();
+    expect(layer.querySelector("[data-slide-hover-leaf]").style.display).toBe("block");
+    expect(el.getAttribute("style") || "").not.toContain("outline");
+
+    // Moving onto the slide stage clears the hover indicator…
+    pointer("pointermove", root.querySelector(".slide"), { clientX: 5, clientY: 5 });
+    expect(layer.querySelector("[data-slide-hover-leaf]").style.display).toBe("none");
+    // …and the element is still untouched.
+    expect(el.getAttribute("style") || "").not.toContain("outline");
 
     engine.destroy();
     root.remove();

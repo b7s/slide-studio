@@ -8,7 +8,7 @@ const TabsList = React.forwardRef(({ className, ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-grid grid-flow-col gap-1 rounded-full border border-[var(--border)] bg-[var(--navy)]/5 p-1",
+      "inline-grid grid-flow-col gap-1 rounded-full bg-[var(--navy)]/5 p-1",
       className
     )}
     {...props}

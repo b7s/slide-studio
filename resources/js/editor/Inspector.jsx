@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, createElement } from "react";
+import { toHex } from "../lib/color";
+import { applyListToElement } from "./listFormat";
 import { Button } from "../Components/ui/button";
 import { Input } from "../Components/ui/input";
 import { Label } from "../Components/ui/label";
@@ -131,15 +133,6 @@ export function cleanHtml(html) {
   };
   walk(host);
   return host.innerHTML;
-}
-
-function toHex(color) {
-  if (!color) return "#000000";
-  if (color.startsWith("#")) return color;
-  const m = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
-  if (!m) return "#000000";
-  const hex = (n) => Number(n).toString(16).padStart(2, "0");
-  return `#${hex(m[1])}${hex(m[2])}${hex(m[3])}`;
 }
 
 function num(v) {
@@ -297,7 +290,6 @@ export default function Inspector() {
 
   const pd = (e) => e.preventDefault();
 
-  const firstList = (root) => root.querySelector("ul, ol");
   // Derive the active list kind from the slide's selection snapshot. This is the
   // authoritative source for the List button: it follows the caret on the slide
   // (including moving to a non-list part of the same box, or losing the
@@ -307,17 +299,6 @@ export default function Inspector() {
     if (snap.list.tag === "ol") return "ordered";
     const t = snap.list.style || "disc";
     return t === "circle" ? "circle" : t === "square" ? "square" : "disc";
-  };
-  // Scan the inline editor for any list it currently contains (box-level, not
-  // caret-based). Used by applyList to decide toggling/converting.
-  const detectListKindInline = (el) => {
-    if (el.querySelector("ol")) return "ordered";
-    const ul = el.querySelector("ul");
-    if (ul) {
-      const t = (ul.style.listStyleType || "disc").replace(/["']/g, "");
-      return t === "circle" ? "circle" : t === "square" ? "square" : "disc";
-    }
-    return null;
   };
   // When the user is actively editing in the inline editor, its own caret wins;
   // otherwise fall back to the slide snapshot (e.g. after clicking the slide).
@@ -336,45 +317,12 @@ export default function Inspector() {
     }
     return listFromSnapshot(s);
   };
-  const changeTag = (node, tag) => {
-    const next = document.createElement(tag);
-    while (node.firstChild) next.appendChild(node.firstChild);
-    node.parentNode.replaceChild(next, node);
-    return next;
-  };
-  const unwrapList = (list) => {
-    const parent = list.parentNode;
-    while (list.firstChild) parent.insertBefore(list.firstChild, list);
-    parent.removeChild(list);
-  };
+  // The DOM list-toggle logic lives in listFormat (shared with the engine's
+  // floating toolbar); here we only drive the inline editor then sync to slide.
   const applyList = (kind) => {
     const el = editorRef.current;
     if (!el) return;
-    const ordered = kind === "ordered";
-    const cur = detectListKindInline(el);
-    el.focus();
-    if (cur === kind) {
-      el.querySelectorAll("ul, ol").forEach(unwrapList);
-    } else if (cur === null) {
-      document.execCommand(ordered ? "insertOrderedList" : "insertUnorderedList", false, null);
-      if (!ordered) {
-        const ul = firstList(el);
-        if (ul) ul.style.listStyleType = kind;
-      }
-    } else {
-      const list = firstList(el);
-      if (!list) {
-        document.execCommand(ordered ? "insertOrderedList" : "insertUnorderedList", false, null);
-      } else if (ordered && list.tagName === "UL") {
-        changeTag(list, "OL");
-      } else if (!ordered && list.tagName === "OL") {
-        changeTag(list, "UL");
-      }
-      if (!ordered) {
-        const ul = firstList(el);
-        if (ul) ul.style.listStyleType = kind;
-      }
-    }
+    applyListToElement(el, kind);
     syncToSlide(true);
     setListKind(computeListKind());
   };
