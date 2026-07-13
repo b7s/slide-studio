@@ -100,4 +100,173 @@
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
+
+  button:is(:hover, :active),
+  a:is(:hover, :active),
+  [role="button"]:is(:hover, :active) {
+    cursor: pointer;
+  }
+}
+
+@layer components {
+  /* ───── Buttons ───── */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors h-9 px-3 py-2;
+  }
+  .btn:focus-visible {
+    @apply outline-none ring-2 ring-[var(--ring)] ring-offset-1;
+  }
+  .btn:disabled {
+    @apply pointer-events-none opacity-45;
+  }
+  .btn [data-slot="icon"] {
+    @apply pointer-events-none size-4 shrink-0;
+  }
+
+  .btn-default {
+    @apply bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--navy-2)];
+  }
+  .btn-destructive {
+    @apply bg-[var(--destructive)] text-[var(--destructive-foreground)] hover:opacity-90;
+  }
+  .btn-outline {
+    @apply border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)];
+  }
+  .btn-secondary {
+    @apply bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:opacity-80;
+  }
+  .btn-ghost {
+    @apply hover:bg-[var(--secondary)] hover:text-[var(--foreground)];
+  }
+  .btn-gold {
+    @apply bg-[var(--accent)] text-[var(--accent-foreground)] border border-[var(--gold)]/50 hover:bg-[var(--gold)]/20;
+  }
+  .btn-save {
+    @apply min-h-9 rounded-md border border-[#1b2228] bg-gradient-to-b from-[#2b3339] to-[#171d22] text-white hover:border-[var(--navy-2)] hover:from-[#173854] hover:to-[#0c2033];
+  }
+
+  .btn-sm {
+    @apply h-8 rounded-md px-3 text-xs;
+  }
+  .btn-lg {
+    @apply h-10 rounded-md px-6;
+  }
+  .btn-icon {
+    @apply h-9 w-9;
+  }
+  .btn-icon-sm {
+    @apply h-8 w-8;
+  }
+
+  .btn[data-slot="icon"]:only-child {
+    @apply px-0;
+  }
+
+  /* ───── Panels ───── */
+  .panel {
+    @apply rounded-2xl border border-[var(--border)] bg-[var(--card)];
+  }
+  .panel-sidebar {
+    @apply rounded-2xl border border-[var(--border)] bg-[var(--sidebar)];
+  }
+
+  /* ───── Overlay (dialog + sheet) ───── */
+  .overlay {
+    @apply fixed inset-0 z-50 bg-black/40 backdrop-blur-sm
+      data-[state=open]:animate-in data-[state=closed]:animate-out
+      data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0;
+  }
+
+  /* ───── Close button (dialog & sheet) ───── */
+  .close-btn {
+    @apply absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100;
+  }
+  .close-btn:focus-visible {
+    @apply outline-none ring-2 ring-[var(--ring)];
+  }
+
+  /* ───── Floating toolbar group ───── */
+  .toolbar-group {
+    @apply pointer-events-auto flex items-center gap-0.5 rounded-xl border border-[var(--border)] bg-white/90 p-1 backdrop-blur;
+  }
+
+  /* ───── Selection path label (status bar) ───── */
+  .toolbar-label {
+    @apply min-w-0 flex-1 truncate text-xs text-[var(--muted-foreground)];
+  }
+
+  /* ───── Vertical separator ───── */
+  .sep-v {
+    @apply mx-1 h-5 w-px bg-[var(--border)];
+  }
+
+  /* ───── Status bar ───── */
+  .status-bar {
+    @apply flex items-center justify-between gap-2 border-t border-[var(--border)] bg-[var(--card)]/70 px-4 py-2 text-xs;
+  }
+  .status-bar__text {
+    @apply flex items-center gap-1.5 text-[var(--muted-foreground)];
+  }
+  .status-bar__actions {
+    @apply flex items-center gap-2;
+  }
+
+  /* ───── Nudge pad / grid control pad ───── */
+  .nudge-pad {
+    @apply grid grid-cols-2 gap-1.5 rounded-md border border-[var(--border)] bg-[var(--secondary)] p-1;
+  }
+
+  /* ───── Slide list item ───── */
+  .slide-item {
+    @apply flex w-full items-stretch gap-3 rounded-xl border p-2 text-left transition;
+  }
+
+  /* ───── Auth card ───── */
+  .auth-card {
+    @apply w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8;
+  }
+
+  /* ───── Brand icon logo ───── */
+  .brand-icon {
+    @apply grid place-items-center rounded-lg bg-gradient-to-br from-[#16283a] to-[#0a141d];
+  }
+
+  /* ───── Input-style element ───── */
+  .input-base {
+    @apply rounded-md border border-[var(--border)] text-sm transition-colors;
+  }
+
+  /* ───── Focus ring (for textareas/inputs/selects) ───── */
+  .focus-ring {
+    @apply focus:border-[var(--focus)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)];
+  }
+  .focus-visible-ring {
+    @apply focus-visible:border-[var(--focus)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)];
+  }
+
+  /* ───── Accordion item ───── */
+  .accordion-item {
+    @apply rounded-xl border border-[var(--border)] bg-[var(--card)];
+  }
+
+  /* ───── Inline icon inside status bar style ───── */
+  .icon-inline {
+    @apply size-3.5;
+  }
+
+  /* ───── Tool icon button (ghost icon in floating toolbar) ───── */
+  .tool-icon {
+    @apply text-[var(--ink-soft)] hover:text-[var(--foreground)] hover:bg-[var(--navy)]/5;
+  }
+
+  /* ───── Rich-text editor (Inspector text panel) ───── */
+  .rt-editor {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .rt-editor:empty::before {
+    content: attr(data-placeholder);
+    color: var(--muted-foreground);
+    pointer-events: none;
+  }
 }
