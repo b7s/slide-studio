@@ -70,4 +70,14 @@ describe("TextToolbar", () => {
     fireEvent.click(swatch);
     expect(cmd.setTextColor).toHaveBeenCalledWith("#22c55e");
   });
+
+  it("keeps popover content inside the text-toolbar so it never blurs the edit session", () => {
+    const cmd = makeCmd();
+    render(<TooltipProvider><TextToolbar style={{ left: 0, top: 0 }} selection={selection} cmd={cmd} /></TooltipProvider>);
+
+    fireEvent.click(screen.getByLabelText(K.color));
+    const content = document.querySelector("[data-text-toolbar] [role='dialog'], [data-text-toolbar]");
+    expect(content).not.toBeNull();
+    expect(content.hasAttribute("data-text-toolbar")).toBe(true);
+  });
 });
