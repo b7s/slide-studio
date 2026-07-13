@@ -366,6 +366,35 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     window.addEventListener("pointerup", onPointerUp);
   }
 
+  // While pressing on a contenteditable, focused box we cannot tell a caret
+  // placement (click) from a move (drag) until the pointer actually moves. We
+  // arm a pending-drag watcher and only *prevent* text selection once movement
+  // crosses a small threshold — a plain click still drops the caret so the user
+  // can edit, but a drag grabs the box and moves it instead of selecting text.
+  let pending = null;
+
+  function onPendingMove(e) {
+    if (!pending) return;
+    const dx = e.clientX - pending.startX;
+    const dy = e.clientY - pending.startY;
+    if (Math.hypot(dx, dy) > 4) {
+      const p = pending;
+      pending = null;
+      window.removeEventListener("pointermove", onPendingMove);
+      window.removeEventListener("pointerup", onPendingUp);
+      const sel = window.getSelection && window.getSelection();
+      if (sel) sel.removeAllRanges();
+      e.preventDefault();
+      beginDrag(e);
+    }
+  }
+
+  function onPendingUp() {
+    pending = null;
+    window.removeEventListener("pointermove", onPendingMove);
+    window.removeEventListener("pointerup", onPendingUp);
+  }
+
   function onPointerDown(e) {
     const handle = e.target.getAttribute && e.target.getAttribute("data-slide-handle");
     if (handle) {
@@ -382,9 +411,13 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
       return;
     }
     if (selected && (e.target === selected || (selected.contains && selected.contains(e.target)))) {
-      // Let the user place the caret / type when the element is already in
-      // text-edit mode and focused; otherwise start dragging it from anywhere.
+      // If the element is already in text-edit mode and focused, a click should
+      // still drop the caret (so the user can edit text), but a drag must move
+      // the box rather than select text. Defer the decision to pointer movement.
       if (selected.getAttribute("contenteditable") === "true" && document.activeElement === selected) {
+        pending = { startX: e.clientX, startY: e.clientY };
+        window.addEventListener("pointermove", onPendingMove);
+        window.addEventListener("pointerup", onPendingUp);
         return;
       }
       e.preventDefault();
@@ -807,7 +840,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
       root.style.position = "relative";
     }
     const w = 440;
-    const h = 80;
+    const h = 12;
     const el = document.createElement("div");
     el.style.position = "absolute";
     el.style.left = `${Math.round((1600 - w) / 2)}px`;
@@ -1045,6 +1078,8 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     window.removeEventListener("pointerdown", onWindowPointerDown);
     window.removeEventListener("pointermove", onPointerMove);
     window.removeEventListener("pointerup", onPointerUp);
+    window.removeEventListener("pointermove", onPendingMove);
+    window.removeEventListener("pointerup", onPendingUp);
     if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
   }
 

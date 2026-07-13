@@ -65,11 +65,36 @@ const RICH_ALLOWED = new Set([
   "B", "STRONG", "I", "EM", "U", "UL", "OL", "LI", "BR", "DIV", "P", "SPAN",
 ]);
 
+// Inline text-formatting properties that survive the round-trip through the
+// rich-text editor. Layout/box properties (position, sizing, background,
+// border, shadow, flex…) are stripped so the panel stays a pure text surface.
+// Keeping colour/font properties means a child that already carries a direct
+// style never loses it, and a child without one keeps inheriting its parent's
+// colour/font — exactly as the user expects when applying a new transformation
+// to a sub-selection: only the changed runs change, the rest inherits.
+const RICH_STYLE_PROPS = new Set([
+  "color",
+  "font-family",
+  "font-size",
+  "font-weight",
+  "font-style",
+  "font-variant",
+  "text-decoration",
+  "text-decoration-line",
+  "text-align",
+  "line-height",
+  "letter-spacing",
+  "text-transform",
+  "vertical-align",
+  "white-space",
+]);
+
 // Strip presentation-only attributes (style/class/positioning data) and drop
 // disallowed tags, unwrapping their children. This keeps semantic formatting
-// (bold, italic, lists, line breaks) without leaking slide-specific styles or
-// custom colors into the editor — or vice versa.
-function cleanHtml(html) {
+// (bold, italic, lists, line breaks) without leaking slide-specific layout
+// styles, while preserving each element's own colour/font so round-tripping
+// never drops inherited or directly-applied text formatting.
+export function cleanHtml(html) {
   const host = document.createElement("div");
   host.innerHTML = html || "";
   const walk = (node) => {
@@ -81,14 +106,23 @@ function cleanHtml(html) {
         parent.removeChild(child);
         return;
       }
-      // Preserve the list bullet style (disc/circle/square) so list formatting
-      // round-trips to the slide; strip every other presentational attribute.
       if (child.tagName === "UL" || child.tagName === "OL") {
+        // Preserve the list bullet style (disc/circle/square) so list
+        // formatting round-trips; strip every other presentational attribute.
         const lst = child.style.listStyleType;
         child.removeAttribute("style");
         if (lst && lst !== "disc") child.style.listStyleType = lst;
       } else {
+        // Keep only text-formatting inline styles, drop layout/box styles.
+        const keep = [];
+        for (let i = 0; i < child.style.length; i += 1) {
+          const prop = child.style.item(i);
+          if (RICH_STYLE_PROPS.has(prop.toLowerCase())) {
+            keep.push(`${prop}:${child.style.getPropertyValue(prop)}`);
+          }
+        }
         child.removeAttribute("style");
+        if (keep.length) child.setAttribute("style", keep.join(";"));
       }
       child.removeAttribute("class");
       child.removeAttribute("data-g4-icon");

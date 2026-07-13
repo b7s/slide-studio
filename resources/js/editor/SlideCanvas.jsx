@@ -25,7 +25,13 @@ const SlideCanvas = forwardRef(function SlideCanvas(
     get shadow() { return shadowRef.current; },
   }), []);
 
-  const BASE_CSS = `.slide,*{color:#e8e8e8;font-family:system-ui,-apple-system,sans-serif}
+  // Default colour/font live on `.slide` and *inherit* to descendants. We must
+  // NOT put `*` here: a `*` rule applies `color` directly to every element,
+  // which overrides inherited values and breaks children inheriting a parent's
+  // (inline) colour/font — e.g. a <b> inside a red <div> would turn grey instead
+  // of red. Scoping to `.slide` lets explicit styles win via the cascade while
+  // inheritance flows colour/font down to every child that doesn't set its own.
+  const BASE_CSS = `.slide{color:#e8e8e8;font-family:system-ui,-apple-system,sans-serif}
 ul,ol{margin:0;padding-left:1.4em}
 li{margin:0}`;
 

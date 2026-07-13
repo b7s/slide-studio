@@ -160,14 +160,14 @@ export default function Topbar({
         {!inspectorInline && inspectorCanInline && (
           <IconTip label={__("messages.topbar.open_props")}>
             <Button variant="ghost" size="icon" aria-label={__("messages.topbar.open_props")} aria-pressed={false} onClick={onToggleInspector}>
-              <SlidersHorizontal />
+              <PanelRight />
             </Button>
           </IconTip>
         )}
         {!inspectorInline && !inspectorCanInline && (
           <IconTip label={__("messages.topbar.props")}>
             <Button variant="ghost" size="icon" aria-label={__("messages.topbar.open_props")} onClick={onOpenInspectorSheet}>
-              <SlidersHorizontal />
+              <PanelRight />
             </Button>
           </IconTip>
         )}
