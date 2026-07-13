@@ -28,10 +28,14 @@ function boxOf(el) {
   return { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) };
 }
 
-function snapshot(root) {
-  return root.innerHTML;
-}
-
+// Serialise only the slide *content* (the `.slide` root's inner HTML), never
+// the whole shadow root. The shadow root also hosts the injected base <style>
+// and the transient selection overlay — those must never be persisted into the
+// Serialise only the slide *content* (the `.slide` root's inner HTML), never
+// the whole shadow root. The shadow root also hosts the injected base <style>
+// and the transient selection overlay — those must never be persisted into the
+// saved slide HTML, otherwise reloading would nest content inside the <style>
+// and re-embed the overlay.
 function parseBox(el) {
   const cs = getComputedStyle(el);
   return {
@@ -55,8 +59,16 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   const slideRoot = () =>
     root.querySelector("[data-slide], .slide, .slide-root") || root.firstElementChild || root;
 
+  // Serialise only the slide content (the `.slide` root's inner HTML),
+  // never the whole shadow root. The shadow root also hosts the injected
+  // base <style> and the transient selection overlay — those must never be
+  // persisted into the saved slide HTML.
+  function snapshot() {
+    return slideRoot().innerHTML;
+  }
+
   function pushHistory() {
-    const snap = snapshot(root);
+    const snap = snapshot();
     if (history[histIndex] === snap) return;
     history = history.slice(0, histIndex + 1);
     history.push(snap);
@@ -66,7 +78,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   }
 
   function emit() {
-    onChange(snapshot(root));
+    onChange(snapshot());
   }
 
   function selectionInfo() {
@@ -75,8 +87,18 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
       return;
     }
     const box = boxOf(selected);
+    const path = (() => {
+      const segs = [];
+      let n = selected;
+      while (n && n !== slideRoot()) {
+        segs.push(n.tagName.toLowerCase());
+        n = n.parentElement;
+      }
+      return segs.reverse().join(" > ");
+    })();
     onSelection({
       tag: selected.tagName.toLowerCase(),
+      path,
       text: (selected.textContent || "").trim().slice(0, 60),
       box,
       styles: {
@@ -96,10 +118,34 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
         borderStyle: selected.style.borderStyle,
         borderColor: selected.style.borderColor,
         boxShadow: selected.style.boxShadow,
+        display: selected.style.display,
+        flexDirection: selected.style.flexDirection,
+        justifyContent: selected.style.justifyContent,
+        alignItems: selected.style.alignItems,
+        textAlign: selected.style.textAlign,
+        padding: selected.style.padding,
       },
       icon: findIcon(),
       editableText: isTextEditable(selected),
       table: tableInfo(),
+      list: (() => {
+        // Reflect the list *under the caret*, not merely whether the selected box
+        // contains a list somewhere. This keeps the List button in sync with where
+        // the user is typing and lets it clear when the caret leaves the list.
+        const ss = typeof window !== "undefined" ? window.getSelection() : null;
+        let n = ss && ss.anchorNode;
+        if (n && n.nodeType === 3) n = n.parentNode;
+        while (n && n !== box) {
+          if (n.tagName === "UL" || n.tagName === "OL") {
+            return {
+              tag: n.tagName.toLowerCase(),
+              style: (n.style.listStyleType || (n.tagName === "OL" ? "decimal" : "disc")).replace(/["']/g, ""),
+            };
+          }
+          n = n.parentNode;
+        }
+        return null;
+      })(),
     });
   }
 
@@ -153,12 +199,35 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     };
   }
 
+  // Pick a selection color that contrasts with the element's effective
+  // background: walk up from the element to find the first opaque background
+  // (element → .slide → host navy), compute its luminance, then choose black
+  // or white so the outline/handles stay readable on any slide — light or
+  // dark, plain or image-filled.
+  function contrastColor(el) {
+    let node = el;
+    while (node && node.nodeType === 1 && node !== root) {
+      const bg = getComputedStyle(node).backgroundColor;
+      const m = bg && bg.match(/rgba?\(([^)]+)\)/);
+      if (m) {
+        const parts = m[1].split(",").map((s) => parseFloat(s.trim()));
+        const [r, g, b, a = 1] = parts;
+        if (a > 0.15) {
+          const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+          return lum > 0.55 ? "#111111" : "#ffffff";
+        }
+      }
+      if (node === slideRoot()) break;
+      node = node.parentElement;
+    }
+    return "#ffffff"; // the slide frame is navy by default
+  }
+
   function buildOverlay() {
     const ov = document.createElement("div");
     ov.setAttribute("data-slide-overlay", "1");
     ov.style.position = "absolute";
     ov.style.pointerEvents = "none";
-    ov.style.border = "1.5px solid #b9915b";
     ov.style.zIndex = "2147483646";
     ov.style.boxSizing = "border-box";
     HANDLES.forEach((pos) => {
@@ -167,7 +236,6 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
       h.style.position = "absolute";
       h.style.width = "10px";
       h.style.height = "10px";
-      h.style.background = "#b9915b";
       h.style.border = "1.5px solid #fff";
       h.style.borderRadius = "2px";
       h.style.pointerEvents = "auto";
@@ -176,6 +244,20 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     });
     root.appendChild(ov);
     return ov;
+  }
+
+  // Apply a contrasting outline + handle fill so the selection stays visible
+  // regardless of the element's background. The handle stroke is the inverse
+  // of the fill so each handle reads on both light and dark areas.
+  function updateOverlayColor() {
+    if (!overlay || !selected) return;
+    const c = contrastColor(selected);
+    const inv = c === "#ffffff" ? "#111111" : "#ffffff";
+    overlay.style.border = `1.5px solid ${c}`;
+    overlay.querySelectorAll("[data-slide-handle]").forEach((handle) => {
+      handle.style.background = inv;
+      handle.style.borderColor = c;
+    });
   }
 
   function cursorFor(pos) {
@@ -206,11 +288,11 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     overlay.style.width = `${w}px`;
     overlay.style.height = `${h}px`;
     const handles = overlay.querySelectorAll("[data-slide-handle]");
-    handles.forEach((h) => {
-      const pos = h.getAttribute("data-slide-handle");
+    handles.forEach((handle) => {
+      const pos = handle.getAttribute("data-slide-handle");
       const [hx, hy] = handleXY(pos, w, h);
-      h.style.left = `${hx - 5}px`;
-      h.style.top = `${hy - 5}px`;
+      handle.style.left = `${hx - 5}px`;
+      handle.style.top = `${hy - 5}px`;
     });
   }
 
@@ -233,8 +315,10 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
       return;
     }
     selected = el;
+    clearHoverOutlines();
     if (overlay) overlay.style.display = "block";
     else overlay = buildOverlay();
+    updateOverlayColor();
     if (editing) setEditable(true);
     positionOverlay();
     selectionInfo();
@@ -243,6 +327,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   function clearSelection() {
     if (selected && editing) setEditable(false);
     selected = null;
+    clearHoverOutlines();
     if (overlay) overlay.style.display = "none";
     onSelection(null);
   }
@@ -260,37 +345,61 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   }
 
   // ---- pointer interactions (drag + resize) ----
+  // Begin dragging the current selection. `user-select:none` is a *transient*
+  // interaction style — we remember the previous inline value so it can be
+  // restored on pointer-up and never leaks into the saved HTML.
+  function beginDrag(e) {
+    const sel = window.getSelection && window.getSelection();
+    if (sel) sel.removeAllRanges();
+    const prevUserSelect = selected.style.userSelect;
+    selected.style.userSelect = "none";
+    const cs = getComputedStyle(selected);
+    drag = {
+      startX: e.clientX,
+      startY: e.clientY,
+      baseX: num(selected.style.left) || num(cs.left) || 0,
+      baseY: num(selected.style.top) || num(cs.top) || 0,
+      moved: false,
+      prevUserSelect,
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+  }
+
   function onPointerDown(e) {
     const handle = e.target.getAttribute && e.target.getAttribute("data-slide-handle");
     if (handle) {
       e.preventDefault();
-      const r = selected.getBoundingClientRect();
       resize = {
         pos: handle,
         startX: e.clientX,
         startY: e.clientY,
         box: parseBox(selected),
+        moved: false,
       };
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp);
       return;
     }
+    if (selected && (e.target === selected || (selected.contains && selected.contains(e.target)))) {
+      // Let the user place the caret / type when the element is already in
+      // text-edit mode and focused; otherwise start dragging it from anywhere.
+      if (selected.getAttribute("contenteditable") === "true" && document.activeElement === selected) {
+        return;
+      }
+      e.preventDefault();
+      beginDrag(e);
+      return;
+    }
     if (e.target === overlay) {
       e.preventDefault();
-      const cs = getComputedStyle(selected);
-      drag = {
-        startX: e.clientX,
-        startY: e.clientY,
-        baseX: num(selected.style.left) || num(cs.left) || 0,
-        baseY: num(selected.style.top) || num(cs.top) || 0,
-      };
-      window.addEventListener("pointermove", onPointerMove);
-      window.addEventListener("pointerup", onPointerUp);
+      beginDrag(e);
     }
   }
 
   function onPointerMove(e) {
     if (resize) {
+      resize.moved = true;
       const dx = e.clientX - resize.startX;
       const dy = e.clientY - resize.startY;
       const { pos, box } = resize;
@@ -301,6 +410,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
       if (pos.includes("n")) { h = box.h - dy; y = box.y + dy; }
       applyBox({ x, y, w: Math.max(8, w), h: Math.max(8, h) });
     } else if (drag) {
+      drag.moved = true;
       const nx = drag.baseX + (e.clientX - drag.startX);
       const ny = drag.baseY + (e.clientY - drag.startY);
       selected.style.left = `${nx}px`;
@@ -313,9 +423,18 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   function onPointerUp() {
     window.removeEventListener("pointermove", onPointerMove);
     window.removeEventListener("pointerup", onPointerUp);
-    if ((drag || resize) && selected) {
-      drag = null;
-      resize = null;
+    // Restore the transient drag-time `user-select` so it is never persisted.
+    if (drag && selected) {
+      if (drag.prevUserSelect) selected.style.userSelect = drag.prevUserSelect;
+      else selected.style.removeProperty("user-select");
+    }
+    // A click without any pointer movement is a *selection*, not an edit — it
+    // must not push history or emit a change (which would flag the slide dirty
+    // and trigger an autosave of unchanged content).
+    const changed = (drag && drag.moved) || (resize && resize.moved);
+    drag = null;
+    resize = null;
+    if (changed && selected) {
       pushHistory();
       emit();
       selectionInfo();
@@ -345,8 +464,11 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   function setStyles(obj) {
     if (!selected) return;
     Object.entries(obj).forEach(([k, v]) => {
-      if (v === "" || v === null || v === undefined) selected.style.removeProperty(k);
-      else selected.style[k] = v;
+      if (v === "" || v === null || v === undefined) {
+        selected.style.removeProperty(k.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase()));
+      } else {
+        selected.style[k] = v;
+      }
     });
     positionOverlay();
     selectionInfo();
@@ -354,9 +476,16 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   }
 
   function applyTextCommand(cmd) {
-    if (!selected || !editing) return;
+    if (!selected || !isTextEditable(selected)) return;
+    // Make the element editable + focused so the selection lives inside it,
+    // then run the command. This works whether or not global edit mode is on,
+    // so the Inspector's bold/italic/list buttons affect the live text.
+    selected.setAttribute("contenteditable", "true");
     selected.focus();
     document.execCommand(cmd, false, null);
+    pushHistory();
+    selectionInfo();
+    positionOverlay();
     emit();
   }
 
@@ -407,6 +536,38 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     pushHistory();
     selectionInfo();
     emit();
+  }
+
+  function setText(text) {
+    if (!selected) return;
+    // innerText preserves line breaks as <br>/<div> in contenteditable;
+    // textContent collapses them into space.
+    selected.innerText = text;
+    pushHistory();
+    selectionInfo();
+    positionOverlay();
+    emit();
+  }
+
+  // Replace the selected element's inner content with the provided HTML while
+  // preserving semantic structure (lists, line breaks, inline runs). This is
+  // what a contenteditable Inspector uses to round-trip formatting changes
+  // back to the slide. The caller is responsible for stripping styles that
+  // would break the on-slide rendering (positioning, sizing, color tokens
+  // baked into the slide's `*` selectors).
+  function setHtml(html) {
+    if (!selected) return;
+    selected.innerHTML = html;
+    clearHoverOutlines();
+    pushHistory();
+    selectionInfo();
+    positionOverlay();
+    emit();
+  }
+
+  function getHtml() {
+    if (!selected) return "";
+    return selected.innerHTML || "";
   }
 
   // ---- icon decoration ----
@@ -640,6 +801,80 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     afterTableChange();
   }
 
+  function insertText() {
+    const root = slideRoot();
+    if (!root.style.position || root.style.position === "static") {
+      root.style.position = "relative";
+    }
+    const w = 440;
+    const h = 80;
+    const el = document.createElement("div");
+    el.style.position = "absolute";
+    el.style.left = `${Math.round((1600 - w) / 2)}px`;
+    el.style.top = `${Math.round((900 - h) / 2)}px`;
+    el.style.width = `${w}px`;
+    el.style.minHeight = `${h}px`;
+    el.style.padding = "24px";
+    el.style.cursor = "move";
+    el.style.zIndex = "1";
+    el.style.outline = "none";
+    el.setAttribute("contenteditable", "true");
+    root.appendChild(el);
+    select(el);
+    el.focus();
+    pushHistory();
+    emit();
+  }
+
+  /** Insert a new absolutely-positioned icon element on the slide. */
+  function insertIcon(name) {
+    const root = slideRoot();
+    if (!root.style.position || root.style.position === "static") {
+      root.style.position = "relative";
+    }
+    const entry = ICON_CATALOG[name];
+    if (!entry) return;
+    const segments = entry.entries ?? [{ tag: entry.tag, attrs: entry.attrs }];
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", "96");
+    svg.setAttribute("height", "96");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "1.5");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("data-icon-name", name);
+    svg.style.display = "block";
+    for (const seg of segments) {
+      const el2 = document.createElementNS("http://www.w3.org/2000/svg", seg.tag);
+      for (const [k, v] of Object.entries(seg.attrs)) {
+        if (k === "key") continue;
+        el2.setAttribute(k, String(v));
+      }
+      svg.appendChild(el2);
+    }
+    const w = 96;
+    const h = 96;
+    const el = document.createElement("div");
+    el.style.position = "absolute";
+    el.style.left = `${Math.round((1600 - w) / 2)}px`;
+    el.style.top = `${Math.round((900 - h) / 2)}px`;
+    el.style.width = `${w}px`;
+    el.style.height = `${h}px`;
+    el.style.cursor = "move";
+    el.style.zIndex = "1";
+    el.style.display = "flex";
+    el.style.alignItems = "center";
+    el.style.justifyContent = "center";
+    el.appendChild(svg);
+    root.appendChild(el);
+    select(el);
+    pushHistory();
+    emit();
+  }
+
   function nudge(dx, dy) {
     if (!selected) return;
     applyBox({ x: parseBox(selected).x + dx, y: parseBox(selected).y + dy });
@@ -660,7 +895,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   }
 
   function restore() {
-    root.innerHTML = history[histIndex];
+    slideRoot().innerHTML = history[histIndex];
     clearSelection();
     emit();
   }
@@ -681,15 +916,108 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   }
 
   function onDocInput() {
-    if (selected && editing) selectionInfo();
+    if (!selected) return;
+    const editable = editing || selected.getAttribute("contenteditable") === "true";
+    if (editable) {
+      selectionInfo();
+      positionOverlay();
+      emit();
+    }
   }
 
   function onDocBlur() {
-    if (selected && editing) pushHistory();
+    if (!selected) return;
+    const editable = editing || selected.getAttribute("contenteditable") === "true";
+    if (editable) pushHistory();
   }
 
   function onScrollOrResize() {
     positionOverlay();
+  }
+
+  // Walk up to the outermost element directly under the slide root — i.e. the
+  // top-level "box"/group that contains the given node. Used for the hover
+  // indicator so the parent container is also outlined as selectable.
+  function topBox(el) {
+    let n = el;
+    while (n && n.parentElement && n.parentElement !== slideRoot()) {
+      n = n.parentElement;
+    }
+    return n;
+  }
+
+  // ---- hover indicator: dotted outline on the element under the cursor AND on
+  // its top-level parent box, so the user can see every selectable item. ----
+  let hoverLeaf = null;
+  let hoverBox = null;
+  // Remember every inline style the hover indicator overwrites so it can be
+  // fully restored — otherwise transient chrome (outline, outline-offset,
+  // border-radius) leaks into the snapshot and gets saved as real content.
+  const hoverPrev = new WeakMap();
+
+  function restoreHover(el) {
+    if (!el || !el.style) return;
+    const prev = hoverPrev.get(el) || {};
+    el.style.outline = prev.outline ?? "";
+    el.style.outlineOffset = prev.outlineOffset ?? "";
+    el.style.borderRadius = prev.borderRadius ?? "";
+  }
+
+  function clearHoverOutlines() {
+    restoreHover(hoverLeaf);
+    if (hoverBox !== hoverLeaf) restoreHover(hoverBox);
+    hoverLeaf = null;
+    hoverBox = null;
+  }
+
+  function applyHoverOutline(el) {
+    if (!el || el === selected) return;
+    if (!hoverPrev.has(el)) {
+      hoverPrev.set(el, {
+        outline: el.style.outline,
+        outlineOffset: el.style.outlineOffset,
+        borderRadius: el.style.borderRadius,
+      });
+    }
+    el.style.outline = `2px dotted ${contrastColor(el)}`;
+    el.style.outlineOffset = "1px";
+    el.style.borderRadius = "3px";
+  }
+
+  function onPointerMoveHover(e) {
+    if (drag || resize) return;
+    const t = e.target;
+    if (!t || t === root || t === slideRoot() || (t.getAttribute && t.getAttribute("data-slide-overlay"))) {
+      clearHoverOutlines();
+      return;
+    }
+    const sr = slideRoot();
+    if (!sr || !sr.contains(t)) {
+      clearHoverOutlines();
+      return;
+    }
+    const box = topBox(t);
+    if (t === hoverLeaf && box === hoverBox) return; // no change since last move
+    clearHoverOutlines();
+    applyHoverOutline(t);
+    applyHoverOutline(box);
+    hoverLeaf = t;
+    hoverBox = box;
+  }
+
+  // Clear the selection only when the user clicks the slide stage itself
+  // (the scrollable canvas area), not when interacting with the editor chrome
+  // (Inspector inputs, toolbar, panels). Otherwise editing the selected
+  // element from the Inspector — e.g. typing in the text area — would drop
+  // the selection the moment the field is focused, so commands no-op.
+  function onWindowPointerDown(e) {
+    if (!selected) return;
+    const path = e.composedPath();
+    if (path.includes(root.host) || path.includes(overlay)) return;
+    const onStage = path.some(
+      (n) => n instanceof Element && n.hasAttribute("data-stage")
+    );
+    if (onStage) clearSelection();
   }
 
   root.addEventListener("click", onDocClick, true);
@@ -697,8 +1025,11 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   root.addEventListener("contextmenu", onContextMenu, true);
   root.addEventListener("input", onDocInput, true);
   root.addEventListener("blur", onDocBlur, true);
+  root.addEventListener("pointermove", onPointerMoveHover, true);
+  root.addEventListener("pointerleave", clearHoverOutlines, true);
   window.addEventListener("scroll", onScrollOrResize, true);
   window.addEventListener("resize", onScrollOrResize, true);
+  window.addEventListener("pointerdown", onWindowPointerDown);
   if (overlay) positionOverlay();
 
   function destroy() {
@@ -707,8 +1038,11 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     root.removeEventListener("contextmenu", onContextMenu, true);
     root.removeEventListener("input", onDocInput, true);
     root.removeEventListener("blur", onDocBlur, true);
+    root.removeEventListener("pointermove", onPointerMoveHover, true);
+    root.removeEventListener("pointerleave", clearHoverOutlines, true);
     window.removeEventListener("scroll", onScrollOrResize, true);
     window.removeEventListener("resize", onScrollOrResize, true);
+    window.removeEventListener("pointerdown", onWindowPointerDown);
     window.removeEventListener("pointermove", onPointerMove);
     window.removeEventListener("pointerup", onPointerUp);
     if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
@@ -728,6 +1062,11 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     group,
     ungroup,
     clearFormatting,
+    insertText,
+    insertIcon,
+    setText,
+    setHtml,
+    getHtml,
     setIcon,
     removeIcon,
     setIconSize,
@@ -748,6 +1087,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     getSelected: () => selected,
     getIcon: findIcon,
     isEditing: () => editing,
+    isEditingText: () => !!(selected && (editing || selected.getAttribute("contenteditable") === "true")),
     destroy,
   };
 }

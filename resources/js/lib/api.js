@@ -55,6 +55,24 @@ export async function saveSlide(file, { html, revision = null, overwrite = false
   return await res.json();
 }
 
+// Fire-and-forget save used on page unload (beforeunload/pagehide/visibilitychange).
+// `navigator.sendBeacon` is the only reliable way to persist during unload: a normal
+// async `fetch` is almost always aborted before it completes, which silently drops
+// the user's last edits. The /api/v1 group has no CSRF middleware, so the beacon
+// (which cannot set custom headers) is accepted using the session cookie alone.
+export function saveSlideBeacon(file, { html, revision = null, overwrite = true }) {
+  if (typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function") {
+    return false;
+  }
+  const url = route("slideSave", { slide: file });
+  const payload = JSON.stringify({ html, revision, overwrite });
+  try {
+    return navigator.sendBeacon(url, new Blob([payload], { type: "application/json" }));
+  } catch {
+    return false;
+  }
+}
+
 export async function duplicateSlide(file, { filename, title = null }) {
   const res = await fetch(route("slideDuplicate", { slide: file }), {
     method: "POST",

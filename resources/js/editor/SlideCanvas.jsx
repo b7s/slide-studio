@@ -25,13 +25,25 @@ const SlideCanvas = forwardRef(function SlideCanvas(
     get shadow() { return shadowRef.current; },
   }), []);
 
+  const BASE_CSS = `.slide,*{color:#e8e8e8;font-family:system-ui,-apple-system,sans-serif}
+ul,ol{margin:0;padding-left:1.4em}
+li{margin:0}`;
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
     if (!shadowRef.current) {
       shadowRef.current = host.attachShadow({ mode: "open" });
     }
-    shadowRef.current.innerHTML = html || "";
+    // Always wrap the slide content in a real `.slide` root. This guarantees
+    // `slideRoot()` (in slideEditor.js) resolves to a positioned container and
+    // never to the injected <style> base element — otherwise inserted text
+    // boxes get appended *inside* the <style> and never render. The wrapper is
+    // 100% of the host (the 1600x900 frame) so absolutely-positioned slide
+    // elements size/position against it.
+    shadowRef.current.innerHTML =
+      `<style data-slide-base="1">${BASE_CSS}</style>` +
+      `<div class="slide" data-slide-root="1" style="position:relative;width:100%;height:100%;overflow:hidden">${html || ""}</div>`;
     // Intentionally empty deps so this runs only on mount/remount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

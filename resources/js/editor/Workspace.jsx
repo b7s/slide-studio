@@ -1,30 +1,43 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../Components/ui/button";
 import { Badge } from "../Components/ui/badge";
+import { Tooltip, TooltipTrigger, TooltipContent } from "../Components/ui/tooltip";
 import { useEditor } from "./EditorContext";
 import { __ } from "../lib/i18n";
+import { cn } from "../Components/lib/utils";
+
+function IconTip({ label, children }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 import SlideCanvas from "./SlideCanvas";
 import ContextMenu from "./ContextMenu";
 import {
-  Undo2,
-  Redo2,
-  Copy,
-  Scissors,
-  Clipboard,
-  Trash2,
-  ZoomIn,
-  ZoomOut,
-  Maximize,
-  Save,
-  CheckCircle2,
-  AlertCircle,
-  Loader2,
-  Pencil,
-  ClipboardCopy,
-  CornerUpRight,
-  CornerUpLeft,
-  Group as GroupIcon,
-  Ungroup,
+    Undo2,
+    Redo2,
+    Copy,
+    Scissors,
+    Clipboard,
+    Trash2,
+    ZoomIn,
+    ZoomOut,
+    Maximize,
+    Minimize2,
+    Save,
+    CheckCircle2,
+    AlertCircle,
+    Loader2,
+    Pencil,
+    Type,
+    ClipboardCopy,
+    CornerUpRight,
+    CornerUpLeft,
+    Group as GroupIcon,
+    Ungroup, FilesIcon,
 } from "lucide-react";
 
 const FRAME_W = 1600;
@@ -48,17 +61,24 @@ export default function Workspace() {
     save,
     reload,
     permissions,
+    slideFullscreen,
+    toggleSlideFullscreen,
   } = useEditor();
 
   const stageRef = useRef(null);
+  const slideRef = useRef(null);
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const onHtmlChangeRef = useRef(onHtmlChange);
   const onSelectionRef = useRef(onEngineSelection);
   const editModeRef = useRef(editMode);
+  const slideFullscreenRef = useRef(slideFullscreen);
+  const toggleSlideFullscreenRef = useRef(toggleSlideFullscreen);
   onHtmlChangeRef.current = onHtmlChange;
   onSelectionRef.current = onEngineSelection;
   editModeRef.current = editMode;
+  slideFullscreenRef.current = slideFullscreen;
+  toggleSlideFullscreenRef.current = toggleSlideFullscreen;
   const [zoom, setZoom] = useState(100);
   const [menu, setMenu] = useState(null);
 
@@ -78,6 +98,18 @@ export default function Workspace() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Center the scroll on the slide whenever a new slide loads, so the user
+  // lands looking at the middle of the canvas rather than the top-left.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const timer = setTimeout(() => {
+      stage.scrollLeft = Math.max(0, (stage.scrollWidth - stage.clientWidth) / 2);
+      stage.scrollTop = Math.max(0, (stage.scrollHeight - stage.clientHeight) / 2);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [slideKey]);
 
   // (Re)build the engine whenever the slide HTML is replaced (new file).
   // We key on `slideKey` (EditorContext.loadNonce, bumped on every fresh
@@ -126,6 +158,7 @@ export default function Workspace() {
       const engine = engineRef.current;
       if (!engine) return;
       const mod = e.ctrlKey || e.metaKey;
+      // Undo/redo always work even when editing text
       if (mod && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (e.shiftKey) engine.redo();
@@ -137,17 +170,21 @@ export default function Workspace() {
         engine.redo();
         return;
       }
+      // Bail if the user is typing inside an editable element (contenteditable,
+      // input, textarea). The browser handles native keys there.
+      if (engine.isEditingText() || /^(input|textarea)$/i.test(e.target.tagName) || e.target.isContentEditable) {
+        return;
+      }
       if (mod && e.key.toLowerCase() === "d") {
         e.preventDefault();
         engine.duplicate();
         return;
       }
-      if (editModeRef.current) return;
       if (mod && e.key.toLowerCase() === "c") { e.preventDefault(); engine.copy(); return; }
       if (mod && e.key.toLowerCase() === "x") { e.preventDefault(); engine.cut(); return; }
       if (mod && e.key.toLowerCase() === "v") { e.preventDefault(); engine.paste(); return; }
       if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); engine.remove(); return; }
-      if (e.key === "Escape") { engine.clearSelection(); return; }
+      if (e.key === "Escape") { if (slideFullscreenRef.current) toggleSlideFullscreenRef.current(); else engine.clearSelection(); return; }
       const step = e.shiftKey ? 10 : 1;
       if (e.key === "ArrowUp") { e.preventDefault(); engine.nudge(0, -step); }
       else if (e.key === "ArrowDown") { e.preventDefault(); engine.nudge(0, step); }
@@ -160,17 +197,14 @@ export default function Workspace() {
 
   const statusIcon =
     statusTone === "error" ? (
-      <AlertCircle className="size-3.5 text-[var(--red)]" />
+      <AlertCircle className="icon-inline text-[var(--red)]" />
     ) : statusTone === "loading" ? (
-      <Loader2 className="size-3.5 animate-spin text-[var(--navy-2)]" />
+      <Loader2 className="icon-inline animate-spin text-[var(--navy-2)]" />
     ) : statusTone === "success" ? (
-      <CheckCircle2 className="size-3.5 text-[var(--success)]" />
+      <CheckCircle2 className="icon-inline text-[var(--success)]" />
     ) : (
-      <CheckCircle2 className="size-3.5 text-[var(--gold-strong)]" />
+      <CheckCircle2 className="icon-inline text-[var(--gold-strong)]" />
     );
-
-  const toolBtn =
-    "text-[var(--ink-soft)] hover:text-[var(--foreground)] hover:bg-[var(--navy)]/5";
 
   const contextItems = menu && menu.hasSelection ? [
     { icon: <ClipboardCopy className="size-3.5" />, label: __("messages.context_menu.duplicate"), onClick: cmd.duplicate },
@@ -190,84 +224,117 @@ export default function Workspace() {
   ];
 
   return (
-    <section className="relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+    <section className="panel relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+      {slideFullscreen && (
+        <button onClick={toggleSlideFullscreen} className="absolute right-4 top-4 z-20 flex size-8 items-center justify-center rounded-md bg-[var(--navy)]/80 text-white hover:bg-[var(--navy)]">
+          <Minimize2 className="size-4" />
+        </button>
+      )}
+      {!slideFullscreen && (
       <div className="pointer-events-none absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2">
-        <div className="pointer-events-auto flex items-center gap-0.5 rounded-xl border border-[var(--border)] bg-white/90 p-1 backdrop-blur">
-          <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.undo")} onClick={cmd.undo} className={toolBtn}>
-            <Undo2 />
-          </Button>
-          <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.redo")} onClick={cmd.redo} className={toolBtn}>
-            <Redo2 />
-          </Button>
-          <span className="mx-1 h-5 w-px bg-[var(--border)]" />
-          <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.copy")} onClick={cmd.copy} className={toolBtn}>
-            <Copy />
-          </Button>
-          <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.cut")} onClick={cmd.cut} className={toolBtn}>
-            <Scissors />
-          </Button>
-          <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.paste")} onClick={cmd.paste} className={toolBtn}>
-            <Clipboard />
-          </Button>
-          <span className="mx-1 h-5 w-px bg-[var(--border)]" />
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={__("messages.context_menu.duplicate")}
-            onClick={cmd.duplicate}
-            className={toolBtn}
-          >
-            <ClipboardCopy />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={__("messages.workspace.delete")}
-            onClick={cmd.remove}
-            className="text-[var(--red)] hover:bg-[var(--red)]/10"
-          >
-            <Trash2 />
-          </Button>
+        <div className="toolbar-group">
+          <IconTip label={__("messages.workspace.undo")}>
+            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.undo")} onClick={cmd.undo} className="tool-icon">
+              <Undo2 />
+            </Button>
+          </IconTip>
+          <IconTip label={__("messages.workspace.redo")}>
+            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.redo")} onClick={cmd.redo} className="tool-icon">
+              <Redo2 />
+            </Button>
+          </IconTip>
+          <span className="sep-v" />
+          <IconTip label={__("messages.workspace.copy")}>
+            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.copy")} onClick={cmd.copy} className="tool-icon">
+              <Copy />
+            </Button>
+          </IconTip>
+          <IconTip label={__("messages.workspace.cut")}>
+            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.cut")} onClick={cmd.cut} className="tool-icon">
+              <Scissors />
+            </Button>
+          </IconTip>
+          <IconTip label={__("messages.workspace.paste")}>
+            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.paste")} onClick={cmd.paste} className="tool-icon">
+              <Clipboard />
+            </Button>
+          </IconTip>
+          <span className="sep-v" />
+          <IconTip label={__("messages.context_menu.duplicate")}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={__("messages.context_menu.duplicate")}
+              onClick={cmd.duplicate}
+              className="tool-icon"
+            >
+              <FilesIcon />
+            </Button>
+          </IconTip>
+          <IconTip label={__("messages.workspace.delete")}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={__("messages.workspace.delete")}
+              onClick={cmd.remove}
+              className="text-[var(--red)] hover:bg-[var(--red)]/10"
+            >
+              <Trash2 />
+            </Button>
+          </IconTip>
         </div>
-        <span className="pointer-events-auto hidden max-w-[260px] truncate rounded-xl border border-[var(--border)] bg-white/90 px-3 py-2 text-xs text-[var(--muted-foreground)] backdrop-blur sm:inline-block">
-          {selectedLabel || __("messages.workspace.select_element")}
-        </span>
-        <div className="pointer-events-auto flex items-center gap-0.5 rounded-xl border border-[var(--border)] bg-white/90 p-1 backdrop-blur">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={__("messages.workspace.edit_slide")}
-            aria-pressed={editMode}
-            onClick={toggleEditMode}
-            disabled={readOnly}
-            className={editMode ? "text-[var(--gold-strong)] bg-[var(--navy)]/5" : toolBtn}
-          >
-            <Pencil />
-          </Button>
-          <span className="mx-1 h-5 w-px bg-[var(--border)]" />
-          <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.zoom_out")} onClick={() => setZoom((z) => Math.max(25, z - 10))} className={toolBtn}>
-            <ZoomOut />
-          </Button>
+        <div className="toolbar-group" data-type="editor">
+          <IconTip label={__("messages.workspace.edit_slide")}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={__("messages.workspace.edit_slide")}
+              aria-pressed={editMode}
+              onClick={toggleEditMode}
+              disabled={readOnly}
+              className={editMode ? "text-[var(--gold-strong)] bg-[var(--navy)]/5" : "tool-icon"}
+            >
+              <Pencil />
+            </Button>
+          </IconTip>
+          <IconTip label={__("messages.workspace.insert_text")}>
+            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.insert_text")} onClick={cmd.insertText} disabled={readOnly} className="tool-icon">
+              <Type />
+            </Button>
+          </IconTip>
+          <span className="sep-v" />
+          <IconTip label={__("messages.workspace.zoom_out")}>
+            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.zoom_out")} onClick={() => setZoom((z) => Math.max(25, z - 10))} className="tool-icon">
+              <ZoomOut />
+            </Button>
+          </IconTip>
           <span className="inline-flex min-w-[46px] justify-center text-xs font-semibold tabular-nums">
             {zoom}%
           </span>
-          <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.zoom_in")} onClick={() => setZoom((z) => Math.min(200, z + 10))} className={toolBtn}>
-            <ZoomIn />
-          </Button>
-          <span className="mx-1 h-5 w-px bg-[var(--border)]" />
-          <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.fit")} className={toolBtn}>
-            <Maximize />
-          </Button>
+          <IconTip label={__("messages.workspace.zoom_in")}>
+            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.zoom_in")} onClick={() => setZoom((z) => Math.min(200, z + 10))} className="tool-icon">
+              <ZoomIn />
+            </Button>
+          </IconTip>
+          <span className="sep-v" />
+          <IconTip label={slideFullscreen ? __("messages.workspace.exit_fullscreen") : __("messages.workspace.fit")}>
+            <Button variant="ghost" size="icon-sm" aria-label={slideFullscreen ? __("messages.workspace.exit_fullscreen") : __("messages.workspace.fit")} onClick={toggleSlideFullscreen} className="tool-icon">
+              {slideFullscreen ? <Minimize2 /> : <Maximize />}
+            </Button>
+          </IconTip>
         </div>
       </div>
+      )}
 
       <div
         ref={stageRef}
-        className="relative grid flex-1 place-items-center overflow-auto bg-[radial-gradient(circle,rgba(23,35,45,0.1)_1px,transparent_1.25px)] p-6 pt-24"
-        style={{ backgroundSize: "22px 22px" }}
+        data-stage
+        className={cn("relative grid flex-1 place-items-center overflow-auto", slideFullscreen ? "bg-[var(--navy)] p-0" : "bg-[radial-gradient(circle,rgba(23,35,45,0.1)_1px,transparent_1.25px)] p-6 pt-24")}
+        style={slideFullscreen ? {} : { backgroundSize: "22px 22px" }}
       >
         <div
-          className="relative rounded-xl bg-[var(--navy)]"
+          ref={slideRef}
+          className={cn("relative bg-[var(--navy)]", slideFullscreen ? "rounded-none" : "rounded-xl")}
           style={{ width: `${FRAME_W}px`, height: `${FRAME_H}px`, transform: `scale(${zoom / 100})`, transformOrigin: "center" }}
         >
           <SlideCanvas
@@ -276,27 +343,34 @@ export default function Workspace() {
             html={html}
             frameWidth={FRAME_W}
             frameHeight={FRAME_H}
-            className="rounded-xl overflow-hidden"
+            className="rounded-xl overflow-hidden shadow-2xl"
           />
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] bg-[var(--card)]/70 px-4 py-2 text-xs">
-        <span className="flex items-center gap-1.5 text-[var(--muted-foreground)]">
-          {statusIcon}
-          {__(statusKey)}
-        </span>
-        <div className="flex items-center gap-2">
+      {!slideFullscreen && (
+      <div className="status-bar">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+              <IconTip label={__(statusKey)}>
+                  <span className="status-bar__text">{statusIcon}</span>
+              </IconTip>
+              <span className="sep-v"></span>
+              <span className="toolbar-label">
+                {selectedLabel || __("messages.workspace.select_element")}
+              </span>
+          </div>
+          <div className="status-bar__actions">
           {dirty && <Badge variant="gold">{__("messages.workspace.unsaved")}</Badge>}
           <Button variant="ghost" size="sm" onClick={reload} aria-label={__("messages.topbar.reload")}>
             {__("messages.workspace.reload")}
           </Button>
-          <Button variant="save" size="sm" disabled={!dirty || readOnly} onClick={() => save(false)}>
+          <Button variant="save" size="sm" title={__("messages.topbar.save_changes")} disabled={!dirty || readOnly} onClick={() => save(false)}>
             <Save />
             {__("messages.workspace.save")}
           </Button>
         </div>
       </div>
+      )}
 
       <ContextMenu
         position={menu}

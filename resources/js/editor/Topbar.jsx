@@ -7,22 +7,23 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "../Components/ui/toolti
 import { GenerateDialog } from "./GenerateDialog";
 import { ShareDialog } from "./ShareDialog";
 import {
-  PanelLeft,
-  FolderOpen,
-  HelpCircle,
-  Eye,
-  RotateCw,
-  Code2,
-  ArrowDownToLine,
-  SlidersHorizontal,
-  Sparkles,
-  Share2,
-  Library,
+    PanelLeft,
+    FolderOpen,
+    HelpCircle,
+    Eye,
+    RotateCw,
+    Code2,
+    ArrowDownToLine,
+    SlidersHorizontal,
+    Sparkles,
+    Share2,
+    Library, PanelRight,
 } from "lucide-react";
 import { useEditorPanels } from "./EditorPanelsContext";
 import { useEditor } from "./EditorContext";
 import { __ } from "../lib/i18n";
 import { route } from "../lib/routes";
+import { cn } from "../Components/lib/utils";
 
 function IconTip({ label, children }) {
   return (
@@ -34,6 +35,7 @@ function IconTip({ label, children }) {
 }
 
 export default function Topbar({
+  className,
   root,
   setRoot,
   deckPath,
@@ -62,7 +64,7 @@ export default function Topbar({
   const readOnly = !(permissions?.canEdit ?? false);
 
   return (
-    <header className="z-30 col-span-full flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2.5 sm:px-4">
+    <header className={cn("z-30 col-span-full flex flex-wrap items-center justify-between gap-2 panel p-2.5 sm:px-4", className)}>
       <div className="flex min-w-0 items-center gap-2">
         {!sidebarInline && sidebarCanInline && (
           <IconTip label={__("messages.topbar.open_slides")}>
@@ -92,7 +94,7 @@ export default function Topbar({
           </IconTip>
         )}
         <div className="flex items-center gap-3">
-          <div className="grid size-9 place-items-center rounded-lg bg-gradient-to-br from-[#16283a] to-[#0a141d]">
+          <div className="brand-icon size-9">
             <span className="text-sm font-bold text-white">{app.short}</span>
           </div>
           <div className="min-w-0">
@@ -155,18 +157,6 @@ export default function Topbar({
             <Eye />
           </Button>
         </IconTip>
-        <IconTip label={__("messages.topbar.reload")}>
-          <Button variant="ghost" size="icon" aria-label={__("messages.topbar.reload")} onClick={onReload ?? reload}>
-            <RotateCw />
-          </Button>
-        </IconTip>
-        <IconTip label={__("messages.topbar.save_html")}>
-          <Button variant="save" disabled={!effectiveDirty || !permissions?.canEdit} className="gap-1.5" onClick={onSave ?? save}>
-            <Code2 className="hidden sm:block" />
-            <span className="hidden sm:inline">{__("messages.topbar.save_changes")}</span>
-            <ArrowDownToLine className="sm:hidden" />
-          </Button>
-        </IconTip>
         {!inspectorInline && inspectorCanInline && (
           <IconTip label={__("messages.topbar.open_props")}>
             <Button variant="ghost" size="icon" aria-label={__("messages.topbar.open_props")} aria-pressed={false} onClick={onToggleInspector}>
@@ -184,7 +174,7 @@ export default function Topbar({
         {inspectorInline && (
           <IconTip label={__("messages.topbar.hide_props")}>
             <Button variant="ghost" size="icon" aria-label={__("messages.topbar.hide_props")} aria-pressed={true} onClick={onToggleInspector}>
-              <SlidersHorizontal />
+              <PanelRight />
             </Button>
           </IconTip>
         )}
