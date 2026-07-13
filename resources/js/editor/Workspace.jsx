@@ -390,7 +390,15 @@ export default function Workspace() {
               left: Math.max(8, x),
               top: above ? y - 56 : y + textToolbar.rect.height + 12,
             };
-            return <TextToolbar style={style} selection={selection} cmd={cmd} />;
+            return (
+              <TextToolbar
+                style={style}
+                selection={selection}
+                cmd={cmd}
+                side={above ? "top" : "bottom"}
+                boundaryRef={stageRef}
+              />
+            );
           })()}
       </div>
 

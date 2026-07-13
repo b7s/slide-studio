@@ -1,0 +1,20 @@
+- generic [ref=f7e2]:
+  - generic [ref=f7e3]:
+    - complementary [ref=f7e4]:
+      - heading "Meus arquivos" [level=1] [ref=f7e6]
+      - generic [ref=f7e9]:
+        - paragraph [ref=f7e10]: Espaços
+        - list
+    - main [ref=f7e11]:
+      - generic [ref=f7e12]:
+        - textbox "Buscar apresentações…" [ref=f7e14]
+        - generic [ref=f7e15]:
+          - generic [ref=f7e16]: Ordenar por
+          - combobox [ref=f7e17]:
+            - generic: Última modificação
+          - button "Decrescente" [ref=f7e20]
+        - button "Nova apresentação" [ref=f7e21]
+      - generic [ref=f7e26]:
+        - paragraph [ref=f7e27]: Nenhuma apresentação
+        - paragraph [ref=f7e28]: Crie uma nova apresentação para começar.
+  - region "Notifications alt+T"

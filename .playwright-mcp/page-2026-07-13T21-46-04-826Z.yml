@@ -1,0 +1,19 @@
+- generic [ref=f6e2]:
+  - generic [ref=f6e4]:
+    - generic [ref=f6e5]:
+      - generic [ref=f6e6]: SS
+      - heading "Slide Studio" [level=1] [ref=f6e8]
+      - paragraph [ref=f6e9]: Acesse sua conta
+    - generic [ref=f6e11]:
+      - generic [ref=f6e12]:
+        - generic [ref=f6e13]: E-mail
+        - textbox "E-mail" [active] [ref=f6e14]
+      - generic [ref=f6e15]:
+        - generic [ref=f6e16]: Senha
+        - textbox "Senha" [ref=f6e17]
+      - button "Entrar" [ref=f6e18]
+    - paragraph [ref=f6e19]:
+      - text: Não tem conta?
+      - link "Criar conta" [ref=f6e20] [cursor=pointer]:
+        - /url: /register
+  - region "Notifications alt+T"

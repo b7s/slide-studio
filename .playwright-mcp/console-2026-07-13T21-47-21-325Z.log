@@ -1,0 +1,19 @@
+[     307ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:8124/node_modules/.vite/deps/client--C8cioMw.js?v=55b1957f:14335
+[    7401ms] Error: `Tooltip` must be used within `TooltipProvider`
+    at useContext2 (http://localhost:8124/node_modules/.vite/deps/dist-Dwb3-00m.js?v=55b1957f:39:10)
+    at Tooltip (http://localhost:8124/node_modules/.vite/deps/@radix-ui_react-tooltip.js?v=55b1957f:57:26)
+    at Object.react_stack_bottom_frame (http://localhost:8124/node_modules/.vite/deps/client--C8cioMw.js?v=55b1957f:12866:12)
+    at renderWithHooks (http://localhost:8124/node_modules/.vite/deps/client--C8cioMw.js?v=55b1957f:4213:19)
+    at updateFunctionComponent (http://localhost:8124/node_modules/.vite/deps/client--C8cioMw.js?v=55b1957f:5569:16)
+    at beginWork (http://localhost:8124/node_modules/.vite/deps/client--C8cioMw.js?v=55b1957f:6140:20)
+    at runWithFiberInDEV (http://localhost:8124/node_modules/.vite/deps/client--C8cioMw.js?v=55b1957f:851:66)
+    at performUnitOfWork (http://localhost:8124/node_modules/.vite/deps/client--C8cioMw.js?v=55b1957f:8429:92)
+    at workLoopSync (http://localhost:8124/node_modules/.vite/deps/client--C8cioMw.js?v=55b1957f:8325:37)
+    at renderRootSync (http://localhost:8124/node_modules/.vite/deps/client--C8cioMw.js?v=55b1957f:8309:6)
+[    7401ms] [WARNING] %s
+
+%s
+ An error occurred in the <Tooltip> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://localhost:8124/node_modules/.vite/deps/client--C8cioMw.js?v=55b1957f:5257
+[  159326ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:8124/node_modules/.vite/deps/client--C8cioMw.js?v=55b1957f:14335
+[  164662ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:8124/node_modules/.vite/deps/client--C8cioMw.js?v=55b1957f:14335

@@ -28,7 +28,7 @@ const LIST_OPTIONS = [
   { k: "ordered", label: __("messages.inspector.list_ordered") },
 ];
 
-export default function TextToolbar({ style, selection, cmd }) {
+export default function TextToolbar({ style, selection, cmd, side = "top", boundaryRef = null }) {
   const [colorOpen, setColorOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
 
@@ -100,7 +100,14 @@ export default function TextToolbar({ style, selection, cmd }) {
             </Button>
           </PopoverTrigger>
         </IconTip>
-        <PopoverContent className="w-44 p-1" align="center" data-text-toolbar>
+        <PopoverContent
+          className="w-44 p-1"
+          align="center"
+          side={side}
+          collisionBoundary={boundaryRef?.current ?? undefined}
+          collisionPadding={8}
+          data-text-toolbar
+        >
           {LIST_OPTIONS.map((opt) => (
             <button
               key={String(opt.k)}
@@ -142,7 +149,14 @@ export default function TextToolbar({ style, selection, cmd }) {
             />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-44 p-2" align="center" data-text-toolbar>
+        <PopoverContent
+          className="w-44 p-2"
+          align="center"
+          side={side}
+          collisionBoundary={boundaryRef?.current ?? undefined}
+          collisionPadding={8}
+          data-text-toolbar
+        >
           <div className="grid grid-cols-6 gap-1.5">
             {QUICK_COLORS.map((c) => (
               <button

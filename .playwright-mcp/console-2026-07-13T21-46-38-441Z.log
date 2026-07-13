@@ -1,0 +1,2 @@
+[      65ms] [LOG] 🔍 Browser logger active (MCP server detected). Posting to: http://localhost:8123/_boost/browser-logs @ http://localhost:8123/:30
+[   14776ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:8123/api/v1/library:0

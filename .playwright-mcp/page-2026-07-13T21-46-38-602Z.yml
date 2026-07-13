@@ -1,0 +1,18 @@
+- generic [ref=f8e2]:
+  - generic [ref=f8e3]:
+    - complementary [ref=f8e4]:
+      - heading "Meus arquivos" [level=1] [ref=f8e6]
+      - generic [ref=f8e9]:
+        - paragraph [ref=f8e10]: Espaços
+        - list
+    - main [ref=f8e11]:
+      - generic [ref=f8e12]:
+        - textbox "Buscar apresentações…" [ref=f8e14]
+        - generic [ref=f8e15]:
+          - generic [ref=f8e16]: Ordenar por
+          - combobox [ref=f8e17]:
+            - generic: Última modificação
+          - button "Decrescente" [ref=f8e20]
+        - button "Nova apresentação" [ref=f8e21]
+      - generic [ref=f8e22]: Carregando…
+  - region "Notifications alt+T"
