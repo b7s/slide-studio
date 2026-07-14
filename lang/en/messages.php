@@ -145,7 +145,6 @@ return [
         'left_col' => 'Left col',
         'right_col' => 'Right col',
         'section_actions' => 'Actions',
-        'section_icon' => 'Icon',
         'icon_size' => 'Icon size',
         'icon_remove' => 'Remove icon',
         'group' => 'Group',
@@ -206,7 +205,7 @@ return [
         'reorder_error' => 'Could not reorder slides',
         'autosave_pending' => 'Auto-saving…',
         'text_toolbar' => [
-            'text_color' => 'Text color',
+            'text_color' => 'Choose color',
             'delete_box' => 'Delete box',
             'list_none' => 'No list',
         ],

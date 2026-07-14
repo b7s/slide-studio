@@ -147,7 +147,6 @@ return [
         'left_col' => '← col',
         'right_col' => '→ col',
         'section_actions' => 'Ações',
-        'section_icon' => 'Ícone',
         'icon_size' => 'Tamanho do ícone',
         'icon_remove' => 'Remover ícone',
         'group' => 'Agrupar',
@@ -208,7 +207,7 @@ return [
         'reorder_error' => 'Erro ao reordenar slides',
         'autosave_pending' => 'Salvando em breve…',
         'text_toolbar' => [
-            'text_color' => 'Cor do texto',
+            'text_color' => 'Escolher cor',
             'delete_box' => 'Excluir caixa',
             'list_none' => 'Sem lista',
         ],
