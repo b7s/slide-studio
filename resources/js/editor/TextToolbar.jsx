@@ -84,12 +84,12 @@ export default function TextToolbar({ style, selection, cmd, side = "top", bound
       <span className="sep-v" />
 
       <Popover open={listOpen} onOpenChange={setListOpen}>
-        <IconTip label={__("messages.inspector.list")}>
+        <IconTip label={__("messages.editor.text_toolbar.list")}>
           <PopoverTrigger asChild>
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label={__("messages.inspector.list")}
+              aria-label={__("messages.editor.text_toolbar.list")}
               className={cn("tool-icon", currentList && "text-[var(--gold-strong)]")}
               onMouseDown={(e) => {
                 pd(e);

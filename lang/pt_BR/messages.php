@@ -207,6 +207,7 @@ return [
         'reorder_error' => 'Erro ao reordenar slides',
         'autosave_pending' => 'Salvando em breve…',
         'text_toolbar' => [
+            'list' => 'Lista',
             'text_color' => 'Escolher cor',
             'delete_box' => 'Excluir caixa',
             'list_none' => 'Sem lista',

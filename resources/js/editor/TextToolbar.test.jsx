@@ -7,7 +7,7 @@ import TextToolbar from "./TextToolbar";
 const K = {
   bold: "messages.inspector.bold",
   italic: "messages.inspector.italic",
-  list: "messages.inspector.list",
+  list: "messages.editor.text_toolbar.list",
   ordered: "messages.inspector.list_ordered",
   none: "messages.editor.text_toolbar.list_none",
   color: "messages.editor.text_toolbar.text_color",

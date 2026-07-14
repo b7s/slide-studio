@@ -205,6 +205,7 @@ return [
         'reorder_error' => 'Could not reorder slides',
         'autosave_pending' => 'Auto-saving…',
         'text_toolbar' => [
+            'list' => 'List',
             'text_color' => 'Choose color',
             'delete_box' => 'Delete box',
             'list_none' => 'No list',
