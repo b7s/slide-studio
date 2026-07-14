@@ -18,6 +18,7 @@ const HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 // (or bump `lucide-react` in `package.json`) and re-run `npm run icons`.
 import { ICON_CATALOG } from "./icons.config";
 import { applyListToElement } from "./listFormat";
+import { rewriteMediaUrlsToPreview, rewriteMediaUrlsToStorage } from "../lib/mediaUrl";
 
 function num(v) {
   const n = parseFloat(v);
@@ -80,6 +81,27 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   // never the whole shadow root. The shadow root also hosts the injected
   // base <style> and the transient selection overlay — those must never be
   // persisted into the saved slide HTML.
+  // A box whose `style` attribute was ever serialised with an unescaped quote
+  // (or another corruption) parses back with bogus attributes such as
+  // `https:`, `slide-studio.testmedia`, `019f.webp");`. They are fragments of
+  // a URL/style value that leaked out when the `"` closed the attribute early.
+  // Strip any attribute whose name is not a plausible real attribute: it either
+  // carries a character illegal in attribute names, or it looks like a URL
+  // fragment (TLD / media extension / protocol). The engine's own attributes
+  // (`data-slide-*`, `data-g4-icon`, `style`, `class`, `contenteditable`,
+  // `xmlns`) are all unaffected.
+  const INVALID_ATTR =
+    /[:;"'=<>\s)]|:\/\/|\.(test|com|net|org|webp|png|jpe?g|gif|svg)/i;
+  function sanitizeAttributes(root) {
+    root.querySelectorAll("*").forEach((el) => {
+      for (const name of [...el.getAttributeNames()]) {
+        if (INVALID_ATTR.test(name)) {
+          el.removeAttribute(name);
+        }
+      }
+    });
+  }
+
   function snapshot() {
     // Never persist editor-only chrome. A box can be left with
     // `contenteditable="true"` (during text edit, after a command, or right
@@ -96,8 +118,9 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     }
     const clone = slideRoot().cloneNode(true);
     clone.querySelectorAll("[contenteditable]").forEach((n) => n.removeAttribute("contenteditable"));
+    sanitizeAttributes(clone);
     if (editCursor !== null) selected.style.cursor = editCursor;
-    return clone.innerHTML;
+    return rewriteMediaUrlsToStorage(clone.innerHTML);
   }
 
   function pushHistory() {
@@ -146,6 +169,11 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
         opacity: selected.style.opacity,
         color: selected.style.color,
         backgroundColor: selected.style.backgroundColor,
+        background: selected.style.background,
+        backgroundImage: selected.style.backgroundImage,
+        backgroundSize: selected.style.backgroundSize,
+        backgroundRepeat: selected.style.backgroundRepeat,
+        backgroundPosition: selected.style.backgroundPosition,
         borderRadius: selected.style.borderRadius,
         borderWidth: selected.style.borderWidth,
         borderStyle: selected.style.borderStyle,
@@ -650,9 +678,33 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     emit();
   }
 
+  // Background longhands that belong to the `background` shorthand. When the
+  // shorthand is being set we must not re-clear these afterwards (see below).
+  const BG_LONGHANDS = [
+    "backgroundColor", "backgroundImage", "backgroundRepeat", "backgroundSize",
+    "backgroundPosition", "backgroundAttachment", "backgroundOrigin", "backgroundClip",
+  ];
+
   function setStyles(obj) {
     if (!selected) return;
+    const hasBackgroundShorthand = !!obj.background;
+    if (hasBackgroundShorthand) {
+      // Setting the `background` shorthand is silently rejected by the browser
+      // when the element already carries explicit `background-*` longhands —
+      // e.g. legacy corrupted `background-attachment/origin/clip: initial` left
+      // over from an earlier bug. Clear every background longhand FIRST so the
+      // shorthand applies; otherwise a gradient is dropped without error.
+      BG_LONGHANDS.forEach((k) =>
+        selected.style.removeProperty(k.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase()))
+      );
+    }
     Object.entries(obj).forEach(([k, v]) => {
+      if (hasBackgroundShorthand && BG_LONGHANDS.includes(k)) {
+        // The shorthand already reset every sub-property, so these clears are
+        // redundant — and removing `background-image` *after* setting the
+        // shorthand would wipe the gradient it just created. Skip them.
+        return;
+      }
       if (v === "" || v === null || v === undefined) {
         selected.style.removeProperty(k.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase()));
       } else {
@@ -1121,7 +1173,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   }
 
   function restore() {
-    slideRoot().innerHTML = history[histIndex];
+    slideRoot().innerHTML = rewriteMediaUrlsToPreview(history[histIndex]);
     clearSelection();
     emit();
   }
