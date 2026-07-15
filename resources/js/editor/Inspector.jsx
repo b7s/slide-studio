@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, createElement } from "react";
-import { toHex } from "../lib/color";
+import { useEffect, useRef, useState } from "react";
+import { toHex, withAlpha, splitColorAlpha } from "../lib/color";
 import { applyListToElement } from "./listFormat";
 import { Button } from "../Components/ui/button";
 import { Input } from "../Components/ui/input";
@@ -27,18 +27,20 @@ import {
   ChevronDown,
   ChevronsUp,
   ChevronsDown,
-  Trash2,
-  Plus,
-  Minus,
   ArrowUp,
   ArrowDown,
   ArrowLeft,
   ArrowRight,
+  ArrowUpLeft,
+  ArrowUpRight,
+  ArrowDownLeft,
+  ArrowDownRight,
 } from "lucide-react";
 import { useEditor } from "./EditorContext";
 import { __ } from "../lib/i18n";
 import { cn } from "../Components/lib/utils";
-import { ICON_CATALOG } from "./icons.config";
+import { MediaPickerDialog } from "./MediaPickerDialog";
+import { touchAsset } from "../lib/api";
 
 const FONTS = ["Inter", "Georgia", "Roboto", "Arial", "Times New Roman", "Courier New"];
 
@@ -127,7 +129,7 @@ export function cleanHtml(html) {
         if (keep.length) child.setAttribute("style", keep.join(";"));
       }
       child.removeAttribute("class");
-      child.removeAttribute("data-g4-icon");
+      child.removeAttribute("data-slide-icon");
       walk(child);
     });
   };
@@ -138,6 +140,330 @@ export function cleanHtml(html) {
 function num(v) {
   const n = parseFloat(v);
   return Number.isFinite(n) ? n : "";
+}
+
+// CSS `linear-gradient` angle semantics: 0deg points up, 90deg right, etc.
+// The grid below is laid out top-left → bottom-right with the matching angle.
+const GRADIENT_DIRS = [
+  { key: "tl", angle: 315, Icon: ArrowUpLeft },
+  { key: "t", angle: 0, Icon: ArrowUp },
+  { key: "tr", angle: 45, Icon: ArrowUpRight },
+  { key: "l", angle: 270, Icon: ArrowLeft },
+  { key: "r", angle: 90, Icon: ArrowRight },
+  { key: "bl", angle: 225, Icon: ArrowDownLeft },
+  { key: "b", angle: 180, Icon: ArrowDown },
+  { key: "br", angle: 135, Icon: ArrowDownRight },
+];
+
+// Drop the optional quotes around a `url("…")` value. Returns "" unless the
+// value is an actual `url(...)` — a serialised gradient (which the browser may
+// move into `background-image` after a round-trip) must NOT be treated as an
+// image here, or the filler type would flip to "image" on its own.
+function urlOf(value) {
+  const v = (value || "").trim();
+  if (!/^url\(/i.test(v)) return "";
+  return v.replace(/^url\(['"]?/i, "").replace(/['"]?\)$/, "").trim();
+}
+
+function isGradient(value) {
+  return /gradient\(/i.test(value || "");
+}
+
+// The element's gradient may live in either `background` or `background-image`
+// (the latter after a serialisation round-trip expands the shorthand), so we
+// check both. A real image only counts when it's an actual `url(...)`.
+function detectFillerMode(st) {
+  const image = urlOf(st.backgroundImage);
+  if (image && image !== "none") return "image";
+  if (isGradient(st.background) || isGradient(st.backgroundImage)) return "gradient";
+  return "solid";
+}
+
+// Read the gradient from whichever property currently holds it.
+function gradientSource(st) {
+  return st.background || st.backgroundImage || "";
+}
+
+function parseGradient(bg) {
+  const m = (bg || "").match(/(linear|radial)-gradient\(([\s\S]+)\)$/);
+  if (!m) {
+    return { type: "linear", angle: 135, c1: "#ffffff", c2: "#000000", alpha: 1 };
+  }
+  const inner = m[2];
+  const type = m[1];
+  // Match hex colours and rgb()/rgba() functions so the picker reflects the
+  // gradient's actual stops (the browser normalises `linear-gradient(...)` to
+  // `rgb(...)` values) and its alpha.
+  const colors = inner.match(/#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)/gi) || [];
+  const am = inner.match(/(\d+)\s*deg/);
+  const angle = am ? parseInt(am[1], 10) : 135;
+  const a1 = splitColorAlpha(colors[0]);
+  const a2 = splitColorAlpha(colors[1]);
+  return {
+    type,
+    angle: type === "radial" ? 0 : angle,
+    c1: a1.rgb,
+    c2: a2.rgb,
+    alpha: a1.alpha,
+  };
+}
+
+// Split a solid background colour into its opaque form and alpha.
+function parseSolid(bgColor) {
+  const { rgb, alpha } = splitColorAlpha(bgColor || "#ffffff");
+  return { color: rgb, alpha };
+}
+
+export function FillerSection({ st, cmd, presentationId }) {
+  const [mediaOpen, setMediaOpen] = useState(false);
+  // `mode` is a controlled local state so the filler-type dropdown switches
+  // immediately on change. It re-syncs to the actual box style whenever the
+  // selected box's background signature changes (e.g. a new selection, or the
+  // autosave round-trip refreshing `st`), so it always reflects reality.
+  const [mode, setMode] = useState(() => detectFillerMode(st));
+  const [grad, setGrad] = useState(() => parseGradient(gradientSource(st)));
+  // Re-sync the controlled `mode`/`grad` whenever the resolved background
+  // signature changes — covers a brand-new selection AND a round-trip
+  // (e.g. the autosave refreshes `st` with a fresh gradient living in
+  // `background-image` after a serialisation cycle, while the selected DOM
+  // node stays the same). A plain DOM-identity check misses the second case
+  // and the dropdown blanked to the mount-time default.
+  // We compare the resolved signature, NOT a one-line `st.background` ref,
+  // because jsdom (and the browser after a round-trip) move the gradient
+  // between `background` and `background-image` indistinguishably.
+  const sigRef = useRef(null);
+  useEffect(() => {
+    const sig = gradientSource(st) || st.backgroundColor || "";
+    if (sig !== sigRef.current) {
+      sigRef.current = sig;
+      setMode(detectFillerMode(st));
+      setGrad(parseGradient(gradientSource(st)));
+    }
+  }, [st, cmd]);
+  const imageUrl = urlOf(st.backgroundImage);
+
+  // Every background change must first strip ALL previous background
+  // formatting (solid colour, gradient, or image + its repeat/size/position),
+  // then apply only the new mode. This prevents leftover properties from a
+  // previous mode (including a corrupted legacy `background-image`) surviving
+  // alongside the new one.
+  const applyBackground = (styles) =>
+    cmd.setStyles({
+      background: "",
+      backgroundColor: "",
+      backgroundImage: "",
+      backgroundRepeat: "",
+      backgroundSize: "",
+      backgroundPosition: "",
+      backgroundAttachment: "",
+      backgroundOrigin: "",
+      backgroundClip: "",
+      ...styles,
+    });
+
+  const applyGradient = (type, angle, c1, c2, alpha = 1) => {
+    const a = alpha ?? 1;
+    const value =
+      type === "radial"
+        ? `radial-gradient(circle, ${withAlpha(c1, a)}, ${withAlpha(c2, a)})`
+        : `linear-gradient(${angle}deg, ${withAlpha(c1, a)}, ${withAlpha(c2, a)})`;
+    setGrad({ type, angle: type === "radial" ? 0 : angle, c1, c2, alpha: a });
+    applyBackground({ background: value });
+  };
+
+  const applySolid = (color, alpha = 1) => {
+    const a = alpha ?? 1;
+    applyBackground({ backgroundColor: withAlpha(color, a) });
+  };
+
+  const handleModeChange = (next) => {
+    setMode(next);
+    if (next === "gradient") {
+      // Preserve the existing gradient (it may live in `background` or, after a
+      // serialisation round-trip, `background-image`) instead of resetting to a
+      // white default every time the mode is (re)selected.
+      if (isGradient(st.background) || isGradient(st.backgroundImage)) {
+        applyGradient(grad.type, grad.angle, grad.c1, grad.c2, grad.alpha);
+      } else {
+        applyGradient("linear", 135, "#ffffff", "#000000", 1);
+      }
+    } else if (next === "solid") {
+      const s = parseSolid(st.backgroundColor);
+      applySolid(s.color, s.alpha);
+    } else if (next === "image") {
+      setMediaOpen(true);
+    }
+  };
+
+  const handleImagePick = (asset) => {
+    applyBackground({
+      backgroundImage: `url("${asset.url}")`,
+      backgroundRepeat: "no-repeat",
+      backgroundSize: st.backgroundSize || "cover",
+      backgroundPosition: "center",
+    });
+    setMediaOpen(false);
+    if (presentationId) {
+      touchAsset(asset.id, presentationId).catch(() => {});
+    }
+  };
+
+  const setImageFit = (size) => cmd.setStyle("backgroundSize", size);
+  const removeImage = () => applyBackground({});
+
+  return (
+    <>
+      <Label>
+        <span>{__("messages.inspector.filler_type")}</span>
+        <select
+          value={mode}
+          onChange={(e) => handleModeChange(e.target.value)}
+          className="input-base h-9 w-full bg-[var(--secondary)] px-2"
+        >
+          <option value="solid">{__("messages.inspector.filler_type_solid")}</option>
+          <option value="gradient">{__("messages.inspector.filler_type_gradient")}</option>
+          <option value="image">{__("messages.inspector.filler_type_image")}</option>
+        </select>
+      </Label>
+
+      {mode === "solid" && (() => {
+        const s = parseSolid(st.backgroundColor);
+        return (
+          <div className="grid gap-2">
+            <ColorField
+              label={__("messages.inspector.filler_color")}
+              value={s.color}
+              onChange={(v) => applySolid(v, s.alpha)}
+            />
+            <OpacityControl value={s.alpha} onChange={(a) => applySolid(s.color, a)} />
+          </div>
+        );
+      })()}
+
+      {mode === "gradient" && (
+        <div className="grid gap-2">
+          <div className="grid grid-cols-2 gap-2">
+            <ColorField
+              label={__("messages.inspector.filler_from")}
+              value={grad.c1}
+              onChange={(v) => applyGradient(grad.type, grad.angle, v, grad.c2, grad.alpha)}
+            />
+            <ColorField
+              label={__("messages.inspector.filler_to")}
+              value={grad.c2}
+              onChange={(v) => applyGradient(grad.type, grad.angle, grad.c1, v, grad.alpha)}
+            />
+          </div>
+          <OpacityControl
+            value={grad.alpha}
+            onChange={(a) => applyGradient(grad.type, grad.angle, grad.c1, grad.c2, a)}
+          />
+          <Label>
+            <span>{__("messages.inspector.filler_gradient_type")}</span>
+            <select
+              value={grad.type}
+              onChange={(e) => applyGradient(e.target.value, grad.angle, grad.c1, grad.c2, grad.alpha)}
+              className="input-base h-9 w-full bg-[var(--secondary)] px-2"
+            >
+              <option value="linear">{__("messages.inspector.filler_linear")}</option>
+              <option value="radial">{__("messages.inspector.filler_radial")}</option>
+            </select>
+          </Label>
+          <div>
+            <span className="mb-1 block text-[11px] font-medium text-[var(--muted-foreground)]">
+              {__("messages.inspector.filler_direction")}
+            </span>
+            <div
+              className="grid grid-cols-3 gap-1"
+              style={{ gridTemplateAreas: '"tl t tr" "l . r" "bl b br"' }}
+            >
+               {GRADIENT_DIRS.map((d) => {
+                const DirIcon = d.Icon;
+                return (
+                <button
+                  key={d.key}
+                  type="button"
+                  disabled={grad.type === "radial"}
+                  onClick={() => applyGradient("linear", d.angle, grad.c1, grad.c2, grad.alpha)}
+                  aria-label={`${d.angle}°`}
+                  className={cn(
+                    "flex h-8 items-center justify-center rounded-md border border-[var(--border)] text-base disabled:opacity-30",
+                    grad.type !== "radial" && grad.angle === d.angle
+                      ? "bg-[var(--navy)]/10 text-[var(--navy)] ring-1 ring-[var(--navy)]/30"
+                      : "hover:bg-[var(--navy)]/5"
+                  )}
+                  style={{ gridArea: d.key }}
+                >
+                  <DirIcon className="h-4 w-4" />
+                </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mode === "image" && (
+        <div className="grid gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={!cmd.getSelected()}
+            onClick={() => setMediaOpen(true)}
+          >
+            {__("messages.inspector.filler_choose_image")}
+          </Button>
+          {imageUrl && imageUrl !== "none" && (
+            <div className="overflow-hidden rounded-md border border-[var(--border)]">
+              <img
+                src={imageUrl.startsWith("media/") ? `/storage/${imageUrl}` : imageUrl}
+                alt=""
+                className="h-24 w-full object-cover"
+              />
+            </div>
+          )}
+          <div className="grid grid-cols-3 gap-2">
+            <Button
+              type="button"
+              variant={st.backgroundSize === "cover" ? "default" : "secondary"}
+              disabled={!cmd.getSelected()}
+              onClick={() => setImageFit("cover")}
+            >
+              {__("messages.inspector.filler_fit_cover")}
+            </Button>
+            <Button
+              type="button"
+              variant={st.backgroundSize === "contain" ? "default" : "secondary"}
+              disabled={!cmd.getSelected()}
+              onClick={() => setImageFit("contain")}
+            >
+              {__("messages.inspector.filler_fit_contain")}
+            </Button>
+            <Button
+              type="button"
+              variant={st.backgroundSize === "auto" ? "default" : "secondary"}
+              disabled={!cmd.getSelected()}
+              onClick={() => setImageFit("auto")}
+            >
+              {__("messages.inspector.filler_fit_auto")}
+            </Button>
+          </div>
+          {imageUrl && imageUrl !== "none" && (
+            <Button type="button" variant="ghost" disabled={!cmd.getSelected()} onClick={removeImage}>
+              {__("messages.inspector.filler_remove_image")}
+            </Button>
+          )}
+        </div>
+      )}
+
+      <MediaPickerDialog
+        open={mediaOpen}
+        onClose={() => setMediaOpen(false)}
+        onPick={handleImagePick}
+        presentationId={presentationId}
+      />
+    </>
+  );
 }
 
 function ColorField({ label, value, onChange }) {
@@ -155,6 +481,251 @@ function ColorField({ label, value, onChange }) {
         <span className="truncate text-[11.5px] font-semibold uppercase">{hex}</span>
       </span>
     </Label>
+  );
+}
+
+// Background-opacity slider. Lives below the colour pickers for both solid and
+// gradient fills; the chosen alpha is folded into the colour via `withAlpha`.
+function OpacityControl({ value, onChange }) {
+  const pct = Math.round((value ?? 1) * 100);
+  return (
+    <Label>
+      <span className="flex items-center justify-between">
+        <span>{__("messages.inspector.filler_opacity")}</span>
+        <span className="text-[11px] font-semibold text-[var(--muted-foreground)]">{pct}%</span>
+      </span>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={pct}
+        onChange={(e) => onChange(Number(e.target.value) / 100)}
+        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-[var(--secondary)] accent-[var(--navy)]"
+      />
+    </Label>
+  );
+}
+
+// box-shadow direction vectors: where the shadow offset falls. A 3×3 grid
+// lets the user pick an angle, and a single "distance" slider sets its length.
+const SHADOW_DIRS = [
+  { key: "tl", sx: -1, sy: -1, Icon: ArrowUpLeft },
+  { key: "t", sx: 0, sy: -1, Icon: ArrowUp },
+  { key: "tr", sx: 1, sy: -1, Icon: ArrowUpRight },
+  { key: "l", sx: -1, sy: 0, Icon: ArrowLeft },
+  { key: "r", sx: 1, sy: 0, Icon: ArrowRight },
+  { key: "bl", sx: -1, sy: 1, Icon: ArrowDownLeft },
+  { key: "b", sx: 0, sy: 1, Icon: ArrowDown },
+  { key: "br", sx: 1, sy: 1, Icon: ArrowDownRight },
+];
+
+const SHADOW_DEFAULTS = {
+  active: false,
+  color: "#000000",
+  alpha: 0.2,
+  blur: 30,
+  spread: 0,
+  distance: 10,
+  dir: "b",
+  inset: false,
+};
+
+// Parse a CSS `box-shadow` string into the structured fields the popover
+// edits. Anything we can't interpret falls back to the defaults (a down-facing
+// soft shadow) so the UI always has a sane starting point.
+function parseBoxShadow(value) {
+  const v = (value || "").trim();
+  if (!v || v === "none") return { ...SHADOW_DEFAULTS };
+  const inset = /\binset\b/i.test(v);
+  const body = v.replace(/\binset\b/i, "").trim();
+  let color = "#000000";
+  let alpha = 0.2;
+  const colorMatch = body.match(/#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)/);
+  if (colorMatch) {
+    const parsed = splitColorAlpha(colorMatch[0]);
+    color = toHex(parsed.rgb);
+    alpha = parsed.alpha;
+  }
+  const nums = body
+    .replace(/#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)/g, "")
+    .trim()
+    .split(/\s+/)
+    .map(parseFloat)
+    .filter((n) => Number.isFinite(n));
+  const offsetX = nums[0] || 0;
+  const offsetY = nums[1] || 0;
+  const blur = nums[2] || 0;
+  const spread = nums[3] || 0;
+  const dirKey =
+    `${offsetY < 0 ? "t" : offsetY > 0 ? "b" : ""}${offsetX < 0 ? "l" : offsetX > 0 ? "r" : ""}` || "b";
+  const distance = Math.max(Math.abs(offsetX), Math.abs(offsetY)) || 10;
+  return { active: true, color, alpha, blur, spread, distance, dir: dirKey, inset };
+}
+
+// Serialise the structured fields back to a CSS `box-shadow` string.
+function buildBoxShadow(s) {
+  if (!s.active) return "none";
+  const dir = SHADOW_DIRS.find((d) => d.key === s.dir) ?? SHADOW_DIRS[6];
+  const ox = Math.round(dir.sx * s.distance);
+  const oy = Math.round(dir.sy * s.distance);
+  const color = withAlpha(s.color, s.alpha);
+  const inset = s.inset ? "inset " : "";
+  return `${inset}${ox}px ${oy}px ${s.blur}px ${s.spread}px ${color}`;
+}
+
+// Shadow editor: a popover with a live miniature, a direction grid, and
+// sliders for distance / intensity / blur / spread plus a colour picker.
+// Replaces the previous free-text box-shadow input so users don't have to
+// remember the CSS syntax.
+function ShadowField({ value, onChange }) {
+  const [state, setState] = useState(() => parseBoxShadow(value));
+  const lastEmitted = useRef(null);
+
+  // Re-sync ONLY when the incoming value differs from what we last emitted
+  // (i.e. a different selection / round-trip), so a user drag is never
+  // clobbered by the slide re-emitting the same value.
+  useEffect(() => {
+    if (value !== lastEmitted.current) {
+      setState(parseBoxShadow(value));
+    }
+  }, [value]);
+
+  const update = (patch) => {
+    const next = { ...state, ...patch };
+    setState(next);
+    const built = buildBoxShadow(next);
+    lastEmitted.current = built;
+    onChange(built);
+  };
+
+  const previewShadow = state.active ? buildBoxShadow(state) : "none";
+  const pct = Math.round((state.alpha ?? 0) * 100);
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex h-9 w-full items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 hover:bg-[var(--navy)]/5 focus-ring"
+        >
+          <span
+            className="h-5 w-5 shrink-0 rounded-sm border border-[var(--border)] bg-[var(--card)]"
+            style={{ boxShadow: previewShadow }}
+          />
+          <span className="truncate text-[11.5px] font-semibold">
+            {state.active ? __("messages.inspector.shadow_edit") : __("messages.inspector.shadow_none")}
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[260px] grid gap-3 p-3" align="start">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-bold uppercase tracking-[0.09em] text-[var(--muted-foreground)]">
+            {__("messages.inspector.shadow")}
+          </span>
+          <label className="flex items-center gap-1.5 text-[11px] text-[var(--muted-foreground)]">
+            <input
+              type="checkbox"
+              checked={state.active}
+              onChange={(e) => update({ active: e.target.checked })}
+              className="accent-[var(--navy)]"
+            />
+            {__("messages.inspector.shadow_enabled")}
+          </label>
+        </div>
+
+        <div className="flex justify-center rounded-md border border-[var(--border)] bg-[var(--secondary)] py-4">
+          <div
+            className="h-12 w-20 rounded-md bg-[var(--card)]"
+            style={{ boxShadow: previewShadow, opacity: state.active ? 1 : 0.35 }}
+            aria-hidden
+          />
+        </div>
+
+        <div className={cn("grid gap-3", !state.active && "pointer-events-none opacity-40")}>
+          <div>
+            <span className="mb-1 block text-[11px] font-medium text-[var(--muted-foreground)]">
+              {__("messages.inspector.shadow_direction")}
+            </span>
+            <div
+              className="grid grid-cols-3 gap-1"
+              style={{ gridTemplateAreas: '"tl t tr" "l . r" "bl b br"' }}
+            >
+              {SHADOW_DIRS.map((d) => {
+                const DirIcon = d.Icon;
+                return (
+                  <button
+                    key={d.key}
+                    type="button"
+                    onClick={() => update({ dir: d.key })}
+                    aria-label={d.key}
+                    className={cn(
+                      "flex h-8 items-center justify-center rounded-md border border-[var(--border)]",
+                      state.dir === d.key
+                        ? "bg-[var(--navy)]/10 text-[var(--navy)] ring-1 ring-[var(--navy)]/30"
+                        : "hover:bg-[var(--navy)]/5"
+                    )}
+                    style={{ gridArea: d.key }}
+                  >
+                    <DirIcon className="h-4 w-4" />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <NumberField
+            label={__("messages.inspector.shadow_distance")}
+            unit="px"
+            value={state.distance}
+            onChange={(v) => update({ distance: Number(v) || 0 })}
+          />
+
+          <Label>
+            <span className="flex items-center justify-between">
+              <span>{__("messages.inspector.shadow_intensity")}</span>
+              <span className="text-[11px] font-semibold text-[var(--muted-foreground)]">{pct}%</span>
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={pct}
+              onChange={(e) => update({ alpha: Number(e.target.value) / 100 })}
+              className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-[var(--secondary)] accent-[var(--navy)]"
+            />
+          </Label>
+
+          <div className="grid grid-cols-2 gap-2">
+            <NumberField
+              label={__("messages.inspector.shadow_blur")}
+              unit="px"
+              value={state.blur}
+              onChange={(v) => update({ blur: Number(v) || 0 })}
+            />
+            <NumberField
+              label={__("messages.inspector.shadow_spread")}
+              unit="px"
+              value={state.spread}
+              onChange={(v) => update({ spread: Number(v) || 0 })}
+            />
+          </div>
+
+          <ColorField
+            label={__("messages.inspector.shadow_color")}
+            value={state.color}
+            onChange={(v) => update({ color: v })}
+          />
+
+          <button
+            type="button"
+            onClick={() => update({ ...SHADOW_DEFAULTS, active: true })}
+            className="h-8 rounded-md border border-[var(--border)] text-[11.5px] font-semibold hover:bg-[var(--navy)]/5"
+          >
+            {__("messages.inspector.shadow_reset")}
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -189,7 +760,7 @@ function Section({ id, label, children }) {
 }
 
 export default function Inspector() {
-  const { selection, cmd } = useEditor();
+  const { selection, cmd, presentationId } = useEditor();
   const [tab, setTab] = useState("props");
   const [nudgeStep, setNudgeStep] = useState(8);
   const [listKind, setListKind] = useState(null);
@@ -361,10 +932,6 @@ export default function Inspector() {
           </TabsList>
         </div>
 
-        <p className="mx-4 mb-1 mt-3 truncate text-[11.5px] font-medium text-[var(--muted-foreground)]">
-          {s ? s.tag : __("messages.inspector.no_selection")}
-        </p>
-
         <TabsContent value="props" className="flex-1 overflow-auto px-4 pb-4">
           <Accordion type="multiple" defaultValue={["text", "position"]} className="grid gap-2">
             <Section id="text" label={__("messages.inspector.section_text")}>
@@ -486,18 +1053,8 @@ export default function Inspector() {
               </div>
             </Section>
 
-            <Section id="color" label={__("messages.inspector.section_color")}>
-              <div className="grid grid-cols-2 gap-2">
-                <ColorField label={__("messages.inspector.color_text")} value={st.color} onChange={(v) => setStyle("color", v)} />
-                <ColorField label={__("messages.inspector.color_fill")} value={st.backgroundColor} onChange={(v) => setStyle("backgroundColor", v)} />
-              </div>
-              <Label>
-                <span>{__("messages.inspector.gradient_image")}</span>
-                <Input
-                  placeholder={__("messages.inspector.gradient_placeholder")}
-                  onBlur={(e) => e.target.value && setStyle("background", e.target.value)}
-                />
-              </Label>
+            <Section id="filler" label={__("messages.inspector.section_filler")}>
+              <FillerSection st={st} cmd={cmd} presentationId={presentationId} />
             </Section>
 
             <Section id="shape" label={__("messages.inspector.section_shape")}>
@@ -522,132 +1079,8 @@ export default function Inspector() {
               </div>
               <Label>
                 <span>{__("messages.inspector.shadow")}</span>
-                <Input
-                  placeholder={__("messages.inspector.shadow_placeholder")}
-                  onBlur={(e) => e.target.value && setStyle("boxShadow", e.target.value)}
-                />
+                <ShadowField value={st.boxShadow} onChange={(v) => setStyle("boxShadow", v)} />
               </Label>
-            </Section>
-
-            <Section id="media" label={__("messages.inspector.section_media")}>
-              <Label>
-                <span>{__("messages.inspector.image_source")}</span>
-                <Input placeholder={__("messages.inspector.image_placeholder")} />
-              </Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="secondary" disabled={disabled} onClick={() => setStyle("objectFit", "cover")}>{__("messages.inspector.cover")}</Button>
-                <Button variant="secondary" disabled={disabled} onClick={() => setStyle("objectFit", "contain")}>{__("messages.inspector.contain")}</Button>
-              </div>
-            </Section>
-
-            <Section id="icon" label={__("messages.inspector.section_icon")}>
-              <div className="grid grid-cols-6 gap-1.5">
-                {Object.keys(ICON_CATALOG).map((name) => {
-                  const active = s?.icon?.name === name;
-                  const entry = ICON_CATALOG[name];
-                  const segments = entry.entries ?? [{ tag: entry.tag, attrs: entry.attrs }];
-                  return (
-                    <button
-                      key={name}
-                      type="button"
-                      title={name}
-                      aria-label={name}
-                      aria-pressed={active}
-                      onClick={() => {
-                        if (s) cmd.setIcon(name);
-                        else cmd.insertIcon(name);
-                      }}
-                      className={[
-                        "grid aspect-square place-items-center rounded-md border text-[var(--foreground)]",
-                        active
-                          ? "border-[var(--gold)] bg-[var(--accent)]"
-                          : "border-[var(--border)] bg-[var(--secondary)] hover:bg-[var(--navy)]/5",
-                      ].join(" ")}
-                    >
-                      <svg
-                        viewBox="0 0 24 24"
-                        width="18"
-                        height="18"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden
-                      >
-                        {segments.map((seg, i) => {
-                          const { key, ...rest } = seg.attrs;
-                          void key;
-                          return createElement(seg.tag, { key: i, ...rest });
-                        })}
-                      </svg>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="grid grid-cols-[1fr_auto] items-end gap-2">
-                <NumberField
-                  label={__("messages.inspector.icon_size")}
-                  unit="px"
-                  value={s?.icon?.size ?? null}
-                  onChange={(v) => cmd.setIconSize(v === "" ? 24 : Number(v))}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  disabled={disabled || !s?.icon}
-                  aria-label={__("messages.inspector.icon_remove")}
-                  onClick={cmd.removeIcon}
-                  title={__("messages.inspector.icon_remove")}
-                >
-                  <Trash2 />
-                </Button>
-              </div>
-            </Section>
-
-            <Section id="table" label={__("messages.inspector.section_table")}>
-              <p className="text-[11.5px] text-[var(--muted-foreground)]">
-                {s?.table?.isCell
-                  ? __("messages.inspector.table_hint")
-                  : __("messages.inspector.table_select_hint")}
-              </p>
-              <div className="grid gap-1.5">
-                <div className="grid grid-cols-2 gap-1.5">
-                  <Button variant="secondary" disabled={!s?.table?.isCell} onClick={() => cmd.insertRow(false)}>
-                    <Plus className="mr-1 size-3.5" />{__("messages.inspector.add_row_before")}
-                  </Button>
-                  <Button variant="secondary" disabled={!s?.table?.isCell} onClick={() => cmd.insertRow(true)}>
-                    <Plus className="mr-1 size-3.5" />{__("messages.inspector.add_row_after")}
-                  </Button>
-                  <Button variant="secondary" disabled={!s?.table?.isCell || (s?.table?.rowCount ?? 0) <= 1} onClick={cmd.deleteRow}>
-                    <Minus className="mr-1 size-3.5" />{__("messages.inspector.rem_row")}
-                  </Button>
-                  <div className="nudge-pad">
-                    <Button variant="ghost" size="icon-sm" disabled={!s?.table?.isCell || (s?.table?.rowIndex ?? 0) <= 0} onClick={() => cmd.moveRow(-1)} aria-label={__("messages.inspector.up_row")}><ArrowUp /></Button>
-                    <Button variant="ghost" size="icon-sm" disabled={!s?.table?.isCell || (s?.table?.rowIndex ?? 0) >= (s?.table?.rowCount ?? 1) - 1} onClick={() => cmd.moveRow(1)} aria-label={__("messages.inspector.down_row")}><ArrowDown /></Button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <Button variant="secondary" disabled={!s?.table?.isCell} onClick={() => cmd.insertColumn(false)}>
-                    <Plus className="mr-1 size-3.5" />{__("messages.inspector.add_col_before")}
-                  </Button>
-                  <Button variant="secondary" disabled={!s?.table?.isCell} onClick={() => cmd.insertColumn(true)}>
-                    <Plus className="mr-1 size-3.5" />{__("messages.inspector.add_col_after")}
-                  </Button>
-                  <Button variant="secondary" disabled={!s?.table?.isCell || (s?.table?.colCount ?? 0) <= 1} onClick={cmd.deleteColumn}>
-                    <Minus className="mr-1 size-3.5" />{__("messages.inspector.rem_col")}
-                  </Button>
-                  <div className="nudge-pad">
-                    <Button variant="ghost" size="icon-sm" disabled={!s?.table?.isCell || (s?.table?.colIndex ?? 0) <= 0} onClick={() => cmd.moveColumn(-1)} aria-label={__("messages.inspector.left_col")}><ArrowLeft /></Button>
-                    <Button variant="ghost" size="icon-sm" disabled={!s?.table?.isCell || (s?.table?.colIndex ?? 0) >= (s?.table?.colCount ?? 1) - 1} onClick={() => cmd.moveColumn(1)} aria-label={__("messages.inspector.right_col")}><ArrowRight /></Button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <NumberField label={__("messages.inspector.row_height")} unit="px" value={num(s?.table?.rowHeight)} onChange={(v) => cmd.setRowHeight(v)} />
-                  <NumberField label={__("messages.inspector.col_width")} unit="px" value={num(s?.table?.colWidth)} onChange={(v) => cmd.setColumnWidth(v)} />
-                </div>
-              </div>
             </Section>
 
             <Section id="actions" label={__("messages.inspector.section_actions")}>
