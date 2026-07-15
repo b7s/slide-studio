@@ -1,11 +1,11 @@
 import "./../css/app.css";
 import React from "react";
-import { createRoot } from "react-dom/client";
-import { createInertiaApp } from "@inertiajs/react";
-import { TooltipProvider } from "./Components/ui/tooltip";
-import { Toaster } from "./Components/ui/sonner";
-import { setTranslations } from "./lib/i18n";
-import { setRoutes } from "./lib/routes";
+import {createRoot} from "react-dom/client";
+import {createInertiaApp} from "@inertiajs/react";
+import {TooltipProvider} from "./Components/ui/tooltip";
+import {Toaster} from "./Components/ui/sonner";
+import {setTranslations} from "./lib/i18n";
+import {setRoutes} from "./lib/routes";
 
 // Initial translations + named-route map are seeded eagerly from
 // `props.initialPage` inside `setup`. Inertia renders a single full-page
@@ -25,6 +25,16 @@ createInertiaApp({
     }
     if (page?.props?.routes) {
       setRoutes(page.props.routes);
+    }
+
+    // Apply a configurable highlight color from the environment (defaults are
+    // declared in `app.css` as `--highlight`/`--highlight-strong`).
+    const root = document.documentElement;
+    if (import.meta.env.VITE_HIGHLIGHT_COLOR) {
+      root.style.setProperty("--highlight", import.meta.env.VITE_HIGHLIGHT_COLOR);
+    }
+    if (import.meta.env.VITE_HIGHLIGHT_STRONG_COLOR) {
+      root.style.setProperty("--highlight-strong", import.meta.env.VITE_HIGHLIGHT_STRONG_COLOR);
     }
 
     createRoot(el).render(

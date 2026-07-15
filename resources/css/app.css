@@ -14,11 +14,9 @@
   --paper-2: #f1f2f2;
   --navy: #001f35;
   --navy-2: #062c46;
-  --gold: #b9915b;
-  --gold-strong: #8f5b12;
-  --red: #842e20;
-  --success: #12693b;
-  --focus: #8f5b12;
+  --highlight: oklch(62.3% 0.214 259.815);
+  --highlight-strong: oklch(58.8% 0.158 241.966);
+  --focus: var(--highlight-strong);
 
   --background: var(--paper);
   --foreground: var(--ink);
@@ -28,17 +26,17 @@
   --popover-foreground: var(--ink);
   --primary: var(--navy);
   --primary-foreground: #f8fafc;
+  --input: rgba(255, 255, 255, 0.74);
   --secondary: var(--input);
   --secondary-foreground: var(--ink);
   --muted: var(--paper-2);
   --muted-foreground: var(--ink-muted);
-  --accent: var(--gold-soft, rgba(185, 145, 91, 0.13));
-  --accent-foreground: var(--gold-strong);
-  --destructive: var(--red);
+  --accent: color-mix(in srgb, var(--highlight) 14%, transparent);
+  --accent-foreground: var(--highlight-strong);
+  --destructive: oklch(58.6% 0.253 17.585);
   --destructive-foreground: #fff;
   --border: rgba(23, 35, 45, 0.12);
-  --input: rgba(255, 255, 255, 0.74);
-  --ring: rgba(143, 91, 18, 0.2);
+  --ring: color-mix(in srgb, var(--highlight) 35%, transparent);
   --sidebar: rgba(255, 255, 255, 0.76);
   --panel: rgba(255, 255, 255, 0.76);
 }
@@ -52,13 +50,13 @@
   --popover-foreground: #eef2f6;
   --primary: #1a3a57;
   --primary-foreground: #fff;
+  --input: rgba(11, 26, 40, 0.6);
   --secondary: var(--input);
   --secondary-foreground: #eef2f6;
   --muted: #14283a;
   --muted-foreground: #93a2b0;
   --border: rgba(255, 255, 255, 0.12);
-  --input: rgba(11, 26, 40, 0.6);
-  --ring: rgba(185, 145, 91, 0.4);
+  --ring: color-mix(in srgb, var(--highlight) 45%, transparent);
   --sidebar: rgba(15, 34, 51, 0.86);
   --panel: rgba(15, 34, 51, 0.86);
 }
@@ -80,6 +78,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-highlight: var(--highlight);
+  --color-highlight-strong: var(--highlight-strong);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -133,13 +133,13 @@
     @apply border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)];
   }
   .btn-secondary {
-    @apply bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:opacity-80;
+    @apply bg-[var(--paper-2)] text-[var(--secondary-foreground)] hover:opacity-80;
   }
   .btn-ghost {
     @apply hover:bg-[var(--secondary)] hover:text-[var(--foreground)];
   }
-  .btn-gold {
-    @apply bg-[var(--accent)] text-[var(--accent-foreground)] border border-[var(--gold)]/50 hover:bg-[var(--gold)]/20;
+  .btn-highlight {
+    @apply bg-[var(--accent)] text-[var(--accent-foreground)] border border-[var(--highlight)]/50 hover:bg-[var(--highlight)]/20;
   }
   .btn-save {
     @apply min-h-9 rounded-md border border-[#1b2228] bg-gradient-to-b from-[#2b3339] to-[#171d22] text-white hover:border-[var(--navy-2)] hover:from-[#173854] hover:to-[#0c2033];

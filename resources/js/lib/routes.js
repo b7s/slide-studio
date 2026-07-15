@@ -26,6 +26,9 @@ export function route(name, params) {
     if (params.user !== undefined) {
       url = url.split(routes.userToken).join(encodeURIComponent(String(params.user)));
     }
+    if (params.asset !== undefined) {
+      url = url.split(routes.assetToken).join(encodeURIComponent(String(params.asset)));
+    }
   }
 
   if (params && params.query && typeof params.query === "object") {

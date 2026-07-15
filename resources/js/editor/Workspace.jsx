@@ -1,10 +1,45 @@
-import { useEffect, useRef, useState } from "react";
-import { Button } from "../Components/ui/button";
-import { Badge } from "../Components/ui/badge";
-import { Tooltip, TooltipTrigger, TooltipContent } from "../Components/ui/tooltip";
-import { useEditor } from "./EditorContext";
-import { __ } from "../lib/i18n";
-import { cn } from "../Components/lib/utils";
+import {createElement, useEffect, useRef, useState} from "react";
+import {Button} from "../Components/ui/button";
+import {Badge} from "../Components/ui/badge";
+import {Tooltip, TooltipContent, TooltipTrigger} from "../Components/ui/tooltip";
+import {Popover, PopoverContent, PopoverTrigger} from "../Components/ui/popover";
+import {useEditor} from "./EditorContext";
+import {__} from "../lib/i18n";
+import {cn} from "../Components/lib/utils";
+import {touchAsset} from "../lib/api";
+import {ICON_CATALOG} from "./icons.config";
+import {MediaPickerDialog} from "./MediaPickerDialog";
+import SlideCanvas from "./SlideCanvas";
+import ContextMenu from "./ContextMenu";
+import TextToolbar from "./TextToolbar";
+import {
+    AlertCircle,
+    CheckCircle2,
+    Clipboard,
+    ClipboardCopy,
+    Copy,
+    CornerUpLeft,
+    CornerUpRight,
+    FilesIcon,
+    Group as GroupIcon,
+    ImagePlus,
+    Loader2,
+    Maximize,
+    Minimize2,
+    Minus,
+    Plus,
+    Redo2,
+    Save,
+    Scissors,
+    Shapes,
+    Table,
+    Trash2,
+    Type,
+    Undo2,
+    Ungroup,
+    ZoomIn,
+    ZoomOut,
+} from "lucide-react";
 
 function IconTip({ label, children }) {
   return (
@@ -14,32 +49,6 @@ function IconTip({ label, children }) {
     </Tooltip>
   );
 }
-import SlideCanvas from "./SlideCanvas";
-import ContextMenu from "./ContextMenu";
-import TextToolbar from "./TextToolbar";
-import {
-    Undo2,
-    Redo2,
-    Copy,
-    Scissors,
-    Clipboard,
-    Trash2,
-    ZoomIn,
-    ZoomOut,
-    Maximize,
-    Minimize2,
-    Save,
-    CheckCircle2,
-    AlertCircle,
-    Loader2,
-    Pencil,
-    Type,
-    ClipboardCopy,
-    CornerUpRight,
-    CornerUpLeft,
-    Group as GroupIcon,
-    Ungroup, FilesIcon,
-} from "lucide-react";
 
 const FRAME_W = 1600;
 const FRAME_H = 900;
@@ -55,7 +64,6 @@ export default function Workspace() {
     selectedLabel,
     selection,
     editMode,
-    toggleEditMode,
     onHtmlChange,
     registerEngine,
     onEngineSelection,
@@ -65,6 +73,7 @@ export default function Workspace() {
     permissions,
     slideFullscreen,
     toggleSlideFullscreen,
+    presentationId,
   } = useEditor();
 
   const stageRef = useRef(null);
@@ -83,6 +92,11 @@ export default function Workspace() {
   toggleSlideFullscreenRef.current = toggleSlideFullscreen;
   const [zoom, setZoom] = useState(100);
   const [menu, setMenu] = useState(null);
+  const [iconOpen, setIconOpen] = useState(false);
+  const [tableOpen, setTableOpen] = useState(false);
+  const [tableRows, setTableRows] = useState(3);
+  const [tableCols, setTableCols] = useState(3);
+  const [mediaOpen, setMediaOpen] = useState(false);
   // Floating text toolbar: visible while a box is in text-edit mode. `rect` is
   // the selected box's viewport rect (emitted by the engine on enter/move).
   const [textToolbar, setTextToolbar] = useState({ active: false, rect: null });
@@ -183,9 +197,13 @@ export default function Workspace() {
         else engine.beginTextEdit();
         return;
       }
-      // Bail if the user is typing inside an editable element (contenteditable,
-      // input, textarea). The browser handles native keys there.
-      if (engine.isEditingText() || /^(input|textarea)$/i.test(e.target.tagName) || e.target.isContentEditable) {
+      // Bail only while the user is actively typing text inside an editable
+      // region (the box's own text-edit session, an input, or a textarea). A
+      // merely *selected* box is contenteditable+focused but not in text-edit
+      // mode, so Delete/Backspace must still remove it (and arrows must still
+      // nudge it). We therefore check the engine's text-edit flag, not the
+      // broader `isEditingText()`, and we must not rely on `isContentEditable`.
+      if (engine.isTextEditing() || /^(input|textarea)$/i.test(e.target.tagName)) {
         return;
       }
       if (mod && e.key.toLowerCase() === "d") {
@@ -233,8 +251,25 @@ export default function Workspace() {
     ) : statusTone === "success" ? (
       <CheckCircle2 className="icon-inline text-[var(--success)]" />
     ) : (
-      <CheckCircle2 className="icon-inline text-[var(--gold-strong)]" />
+      <CheckCircle2 className="icon-inline text-[var(--highlight-strong)]" />
     );
+
+  const handleIconPick = (name) => {
+    if (selection?.icon) cmd.setIcon(name);
+    else cmd.insertIcon(name);
+    setIconOpen(false);
+  };
+
+  const handleTableInsert = () => {
+    cmd.insertTable(tableRows, tableCols);
+    setTableOpen(false);
+  };
+
+  const handleMediaPick = (asset) => {
+    cmd.insertImageBox(asset);
+    setMediaOpen(false);
+    if (presentationId) touchAsset(asset.id, presentationId).catch(() => {});
+  };
 
   const contextItems = menu && menu.hasSelection ? [
     { icon: <ClipboardCopy className="size-3.5" />, label: __("messages.context_menu.duplicate"), onClick: cmd.duplicate },
@@ -275,12 +310,12 @@ export default function Workspace() {
           </IconTip>
           <span className="sep-v" />
           <IconTip label={__("messages.workspace.copy")}>
-            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.copy")} onClick={cmd.copy} className="tool-icon">
+            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.copy")} onClick={cmd.copy} disabled={!selection} className="tool-icon">
               <Copy />
             </Button>
           </IconTip>
           <IconTip label={__("messages.workspace.cut")}>
-            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.cut")} onClick={cmd.cut} className="tool-icon">
+            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.cut")} onClick={cmd.cut} disabled={!selection} className="tool-icon">
               <Scissors />
             </Button>
           </IconTip>
@@ -296,6 +331,7 @@ export default function Workspace() {
               size="icon-sm"
               aria-label={__("messages.context_menu.duplicate")}
               onClick={cmd.duplicate}
+              disabled={!selection}
               className="tool-icon"
             >
               <FilesIcon />
@@ -307,6 +343,7 @@ export default function Workspace() {
               size="icon-sm"
               aria-label={__("messages.workspace.delete")}
               onClick={cmd.remove}
+              disabled={!selection}
               className="text-[var(--red)] hover:bg-[var(--red)]/10"
             >
               <Trash2 />
@@ -314,22 +351,100 @@ export default function Workspace() {
           </IconTip>
         </div>
         <div className="toolbar-group" data-type="editor">
-          <IconTip label={__("messages.workspace.edit_slide")}>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={__("messages.workspace.edit_slide")}
-              aria-pressed={editMode}
-              onClick={toggleEditMode}
-              disabled={readOnly}
-              className={editMode ? "text-[var(--gold-strong)] bg-[var(--navy)]/5" : "tool-icon"}
-            >
-              <Pencil />
-            </Button>
-          </IconTip>
           <IconTip label={__("messages.workspace.insert_text")}>
             <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.insert_text")} onClick={cmd.insertText} disabled={readOnly} className="tool-icon">
               <Type />
+            </Button>
+          </IconTip>
+          <span className="sep-v" />
+          <Popover open={iconOpen} onOpenChange={setIconOpen}>
+            <IconTip label={__("messages.workspace.insert_icon")}>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.insert_icon")} disabled={readOnly} className="tool-icon">
+                  <Shapes />
+                </Button>
+              </PopoverTrigger>
+            </IconTip>
+            <PopoverContent className="w-64 max-h-72 overflow-auto p-2" align="end" side="bottom">
+              <div className="grid grid-cols-6 gap-1.5">
+                {Object.keys(ICON_CATALOG).map((name) => {
+                  const entry = ICON_CATALOG[name];
+                  const segments = entry.entries ?? [{ tag: entry.tag, attrs: entry.attrs }];
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      title={name}
+                      aria-label={name}
+                      onClick={() => handleIconPick(name)}
+                      className="grid aspect-square place-items-center rounded-md border border-[var(--border)] bg-[var(--secondary)] text-[var(--foreground)] hover:bg-[var(--navy)]/5"
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="18"
+                        height="18"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden
+                      >
+                        {segments.map((seg, i) => {
+                          const { key, ...rest } = seg.attrs;
+                          void key;
+                          return createElement(seg.tag, { key: i, ...rest });
+                        })}
+                      </svg>
+                    </button>
+                  );
+                })}
+              </div>
+            </PopoverContent>
+          </Popover>
+          <Popover open={tableOpen} onOpenChange={setTableOpen}>
+            <IconTip label={__("messages.workspace.insert_table")}>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.insert_table")} disabled={readOnly} className="tool-icon">
+                  <Table />
+                </Button>
+              </PopoverTrigger>
+            </IconTip>
+            <PopoverContent className="w-56 space-y-3 p-3" align="end" side="bottom">
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-[var(--muted-foreground)]">{__("messages.workspace.table_rows")}</span>
+                  <div className="flex items-center gap-1">
+                    <Button variant="outline" size="icon-sm" aria-label={__("messages.workspace.table_rows_dec")} disabled={tableRows <= 1} onClick={() => setTableRows((v) => Math.max(1, v - 1))}>
+                      <Minus />
+                    </Button>
+                    <span className="inline-flex min-w-[1.5rem] justify-center text-sm font-semibold tabular-nums">{tableRows}</span>
+                    <Button variant="outline" size="icon-sm" aria-label={__("messages.workspace.table_rows_inc")} disabled={tableRows >= 20} onClick={() => setTableRows((v) => Math.min(20, v + 1))}>
+                      <Plus />
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-[var(--muted-foreground)]">{__("messages.workspace.table_cols")}</span>
+                  <div className="flex items-center gap-1">
+                    <Button variant="outline" size="icon-sm" aria-label={__("messages.workspace.table_cols_dec")} disabled={tableCols <= 1} onClick={() => setTableCols((v) => Math.max(1, v - 1))}>
+                      <Minus />
+                    </Button>
+                    <span className="inline-flex min-w-[1.5rem] justify-center text-sm font-semibold tabular-nums">{tableCols}</span>
+                    <Button variant="outline" size="icon-sm" aria-label={__("messages.workspace.table_cols_inc")} disabled={tableCols >= 20} onClick={() => setTableCols((v) => Math.min(20, v + 1))}>
+                      <Plus />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <Button variant="secondary" className="w-full" onClick={handleTableInsert}>
+                {__("messages.workspace.table_insert")}
+              </Button>
+            </PopoverContent>
+          </Popover>
+          <IconTip label={__("messages.workspace.insert_media")}>
+            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.insert_media")} disabled={readOnly} className="tool-icon" onClick={() => setMediaOpen(true)}>
+              <ImagePlus />
             </Button>
           </IconTip>
           <span className="sep-v" />
@@ -414,7 +529,7 @@ export default function Workspace() {
               </span>
           </div>
           <div className="status-bar__actions">
-          {dirty && <Badge variant="gold">{__("messages.workspace.unsaved")}</Badge>}
+          {dirty && <Badge variant="highlight">{__("messages.workspace.unsaved")}</Badge>}
           <Button variant="ghost" size="sm" onClick={reload} aria-label={__("messages.topbar.reload")}>
             {__("messages.workspace.reload")}
           </Button>
@@ -430,6 +545,13 @@ export default function Workspace() {
         position={menu}
         items={contextItems}
         onClose={() => setMenu(null)}
+      />
+
+      <MediaPickerDialog
+        open={mediaOpen}
+        onClose={() => setMediaOpen(false)}
+        onPick={handleMediaPick}
+        presentationId={presentationId}
       />
     </section>
   );

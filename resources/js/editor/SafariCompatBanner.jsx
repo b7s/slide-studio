@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { Button } from "../Components/ui/button";
-import { __ } from "../lib/i18n";
+import {useEffect, useState} from "react";
+import {Button} from "../Components/ui/button";
+import {__} from "../lib/i18n";
 
 const STORAGE_KEY = "slide-studio:browser-warning-dismissed";
 
@@ -31,7 +31,7 @@ export function SafariCompatBanner() {
   return (
     <div
       role="alert"
-      className="col-span-full flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--gold)]/40 bg-[var(--gold)]/10 px-4 py-2.5 text-sm"
+      className="col-span-full flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--highlight)]/40 bg-[var(--highlight)]/10 px-4 py-2.5 text-sm"
     >
       <div>
         <p className="font-semibold">{__("messages.browser.warn_title")}</p>

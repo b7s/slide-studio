@@ -22,7 +22,7 @@ final class CreateStarterPresentation
             $title = $title ?? 'Apresentação';
 
             $presentation = Presentation::createForTeam($team, $title);
-            $presentation->update(['settings' => ['theme' => 'navy-gold']]);
+            $presentation->update(['settings' => ['theme' => 'navy-highlight']]);
 
             $presentation->slides()->create([
                 'position' => 1,

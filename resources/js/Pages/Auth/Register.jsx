@@ -1,9 +1,9 @@
-import { useState } from "react";
-import { Head, Link, usePage } from "@inertiajs/react";
-import { Button } from "../../Components/ui/button";
-import { Input } from "../../Components/ui/input";
-import { Label } from "../../Components/ui/label";
-import { __ } from "../../lib/i18n";
+import {useState} from "react";
+import {Head, Link, usePage} from "@inertiajs/react";
+import {Button} from "../../Components/ui/button";
+import {Input} from "../../Components/ui/input";
+import {Label} from "../../Components/ui/label";
+import {__} from "../../lib/i18n";
 
 export default function Register({ errors }) {
   const [name, setName] = useState("");
@@ -98,7 +98,7 @@ export default function Register({ errors }) {
 
         <p className="mt-4 text-center text-sm text-[var(--muted-foreground)]">
           {__("messages.auth.has_account")}{" "}
-          <Link href="/login" className="font-medium text-[var(--gold)] hover:underline">
+          <Link href="/login" className="font-medium text-[var(--highlight)] hover:underline">
             {__("messages.auth.login")}
           </Link>
         </p>

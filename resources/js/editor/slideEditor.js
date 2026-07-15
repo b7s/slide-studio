@@ -16,9 +16,9 @@ const HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 // via `scripts/icons.mjs`. Do not hand-edit icon paths inside this file — to
 // change the catalog, update the ICONS whitelist in `scripts/icons.mjs`
 // (or bump `lucide-react` in `package.json`) and re-run `npm run icons`.
-import { ICON_CATALOG } from "./icons.config";
-import { applyListToElement } from "./listFormat";
-import { rewriteMediaUrlsToPreview, rewriteMediaUrlsToStorage } from "../lib/mediaUrl";
+import {ICON_CATALOG} from "./icons.config";
+import {applyListToElement} from "./listFormat";
+import {rewriteMediaUrlsToPreview, rewriteMediaUrlsToStorage} from "../lib/mediaUrl";
 
 function num(v) {
   const n = parseFloat(v);
@@ -88,7 +88,7 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   // Strip any attribute whose name is not a plausible real attribute: it either
   // carries a character illegal in attribute names, or it looks like a URL
   // fragment (TLD / media extension / protocol). The engine's own attributes
-  // (`data-slide-*`, `data-g4-icon`, `style`, `class`, `contenteditable`,
+  // (`data-slide-*`, `data-slide-icon`, `style`, `class`, `contenteditable`,
   // `xmlns`) are all unaffected.
   const INVALID_ATTR =
     /[:;"'=<>\s)]|:\/\/|\.(test|com|net|org|webp|png|jpe?g|gif|svg)/i;
@@ -664,6 +664,13 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     if (y !== undefined) { selected.style.top = `${y}px`; selected.style.position = selected.style.position || "absolute"; }
     if (w !== undefined) selected.style.width = `${w}px`;
     if (h !== undefined) selected.style.height = `${h}px`;
+    // Keep an icon's stored size in sync with its (resized) box so the Inspector
+    // and findIcon() report the true glyph size. The SVG fills the box via CSS.
+    if ((w !== undefined || h !== undefined) && selected.querySelector('[data-slide-icon="1"]')) {
+      const iconSvg = selected.querySelector('[data-slide-icon="1"]');
+      if (w !== undefined) iconSvg.setAttribute("width", String(Math.round(w)));
+      if (h !== undefined) iconSvg.setAttribute("height", String(Math.round(h)));
+    }
   }
 
   function setStyle(prop, value) {
@@ -847,13 +854,13 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   }
 
   // ---- icon decoration ----
-  // The current icon (if any) is the first `<svg data-g4-icon="1">` child of
+  // The current icon (if any) is the first `<svg data-slide-icon="1">` child of
   // the selected element. The catalog is keyed by name → path data; the SVG we
   // materialise uses an inline `<path>` with `currentColor`, so the icon
   // inherits the element's color and stays sizeable via inline width/height.
   function findIcon() {
     if (!selected) return null;
-    const svg = selected.querySelector('[data-g4-icon="1"]');
+    const svg = selected.querySelector('[data-slide-icon="1"]');
     if (!(svg instanceof Element)) return null;
     const name = svg.getAttribute("data-icon-name") || "";
     const w = parseFloat(svg.getAttribute("width")) || svg.clientWidth || 24;
@@ -863,15 +870,15 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
 
   function ensureIconCleared() {
     if (!selected) return;
-    selected.querySelectorAll('[data-g4-icon="1"]').forEach((n) => n.remove());
+    selected.querySelectorAll('[data-slide-icon="1"]').forEach((n) => n.remove());
   }
 
   function buildIconSvg(name) {
     const entry = ICON_CATALOG[name];
     if (!entry || !selected) return;
-    const size = findIcon()?.size ?? 24;
+    const size = Math.round(parseBox(selected).w) || findIcon()?.size || 24;
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("data-g4-icon", "1");
+    svg.setAttribute("data-slide-icon", "1");
     svg.setAttribute("data-icon-name", name);
     svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
     svg.setAttribute("viewBox", "0 0 24 24");
@@ -883,6 +890,9 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     svg.setAttribute("stroke-linecap", "round");
     svg.setAttribute("stroke-linejoin", "round");
     svg.style.display = "block";
+    // Fill the wrapper box so the icon scales with it on resize.
+    svg.style.width = "100%";
+    svg.style.height = "100%";
 
     // The catalog entries from scripts/icons.mjs come in two forms:
     //   single-path/circle → { tag, attrs: {...} }
@@ -919,13 +929,10 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   }
 
   function setIconSize(px) {
-    if (!selected) return;
-    const icon = findIcon();
-    if (!icon) return;
-    const svg = selected.querySelector('[data-g4-icon="1"]');
+    if (!selected || !findIcon()) return;
     const v = Math.max(8, Math.min(512, Number(px) || 24));
-    svg.setAttribute("width", String(v));
-    svg.setAttribute("height", String(v));
+    // Resize the wrapper box; the icon SVG fills it, so the glyph scales too.
+    applyBox({ w: v, h: v });
     pushHistory();
     selectionInfo();
     emit();
@@ -954,10 +961,19 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
 
   function duplicate() {
     if (!selected) return;
-    // Clone as a true sibling (not nested via paste) so the new box sits next to
-    // the original, then move the selection to the fresh copy.
-    const clone = selected.cloneNode(true);
-    selected.parentNode.insertBefore(clone, selected.nextSibling);
+    // Always duplicate the *top-level box* under the slide root, never a nested
+    // child that happened to be the click target (e.g. a table cell), so the
+    // copy is a faithful clone of the whole box with all its content.
+    const box = topBox(selected);
+    const clone = box.cloneNode(true);
+    // Nudge the copy a little so it doesn't land exactly on top of the original
+    // (which would make the duplicate look like it did nothing).
+    const offset = 16;
+    const left = Math.min(1600 - 1, Math.max(0, (num(box.style.left) || 0) + offset));
+    const top = Math.min(900 - 1, Math.max(0, (num(box.style.top) || 0) + offset));
+    clone.style.left = `${left}px`;
+    clone.style.top = `${top}px`;
+    box.parentNode.insertBefore(clone, box.nextSibling);
     select(clone);
     pushHistory();
     emit();
@@ -1123,8 +1139,13 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     svg.setAttribute("stroke-width", "1.5");
     svg.setAttribute("stroke-linecap", "round");
     svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("data-slide-icon", "1");
     svg.setAttribute("data-icon-name", name);
     svg.style.display = "block";
+    // Fill the wrapper box so the icon scales with it on resize (both grow and
+    // shrink) instead of keeping a fixed pixel size.
+    svg.style.width = "100%";
+    svg.style.height = "100%";
     for (const seg of segments) {
       const el2 = document.createElementNS("http://www.w3.org/2000/svg", seg.tag);
       for (const [k, v] of Object.entries(seg.attrs)) {
@@ -1147,6 +1168,77 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     el.style.alignItems = "center";
     el.style.justifyContent = "center";
     el.appendChild(svg);
+    root.appendChild(el);
+    select(el);
+    pushHistory();
+    emit();
+  }
+
+  /** Insert a new absolutely-positioned table element on the slide. */
+  function insertTable(rows, cols) {
+    const root = slideRoot();
+    if (!root.style.position || root.style.position === "static") {
+      root.style.position = "relative";
+    }
+    const rowCount = Math.max(1, Math.min(20, rows | 0));
+    const colCount = Math.max(1, Math.min(20, cols | 0));
+    const table = document.createElement("table");
+    table.style.borderCollapse = "collapse";
+    table.style.width = "100%";
+    table.style.tableLayout = "fixed";
+    for (let r = 0; r < rowCount; r += 1) {
+      const tr = document.createElement("tr");
+      tr.style.height = "56px";
+      for (let c = 0; c < colCount; c += 1) {
+        const td = document.createElement("td");
+        td.style.border = "1px solid #cbd5e1";
+        td.style.padding = "8px 12px";
+        td.textContent = "";
+        tr.appendChild(td);
+      }
+      table.appendChild(tr);
+    }
+    const w = Math.min(640, 1600 - 80);
+    const h = 56 * rowCount + 4;
+    const el = document.createElement("div");
+    el.style.position = "absolute";
+    el.style.left = `${Math.round((1600 - w) / 2)}px`;
+    el.style.top = `${Math.round((900 - h) / 2)}px`;
+    el.style.width = `${w}px`;
+    el.style.minHeight = `${h}px`;
+    el.style.cursor = "move";
+    el.style.zIndex = "1";
+    el.style.outline = "none";
+    el.style.border = "1px solid #e2e8f0";
+    el.appendChild(table);
+    root.appendChild(el);
+    select(el);
+    pushHistory();
+    emit();
+  }
+
+  /** Insert a new absolutely-positioned image box (picture fill) on the slide. */
+  function insertImageBox(asset) {
+    if (!asset || !asset.url) return;
+    const root = slideRoot();
+    if (!root.style.position || root.style.position === "static") {
+      root.style.position = "relative";
+    }
+    const w = 480;
+    const h = 270;
+    const el = document.createElement("div");
+    el.style.position = "absolute";
+    el.style.left = `${Math.round((1600 - w) / 2)}px`;
+    el.style.top = `${Math.round((900 - h) / 2)}px`;
+    el.style.width = `${w}px`;
+    el.style.height = `${h}px`;
+    el.style.cursor = "move";
+    el.style.zIndex = "1";
+    el.style.outline = "none";
+    el.style.backgroundImage = `url("${asset.url}")`;
+    el.style.backgroundRepeat = "no-repeat";
+    el.style.backgroundSize = "contain";
+    el.style.backgroundPosition = "center";
     root.appendChild(el);
     select(el);
     pushHistory();
@@ -1454,6 +1546,8 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
     clearFormatting,
     insertText,
     insertIcon,
+    insertTable,
+    insertImageBox,
     setText,
     setHtml,
     getHtml,

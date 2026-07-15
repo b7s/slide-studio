@@ -5,7 +5,7 @@
 // whitelist in scripts/icons.mjs + (optionally) bump "lucide-react" in package.json,
 // then run the script and commit both the catalog file and (if you bumped) package.json.
 //
-// At runtime every entry in ICON_CATALOG becomes an inline SVG with data-g4-icon=1
+// At runtime every entry in ICON_CATALOG becomes an inline SVG with data-slide-icon=1
 // inside the slide DOM; the engine reads back the data-icon-name so the catalog
 // is the persistence contract for these decorations.
 

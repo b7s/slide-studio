@@ -15,6 +15,7 @@ Compact guidance for agents working in this repo. Read `progress.md` for the pha
 - Full setup once: `composer setup` (installs PHP + JS deps, generates key, migrates, builds).
 - Dev (full app needs BOTH servers): `composer dev` runs `php artisan serve` + queue + pail + `npm run dev` together. `npm run dev` alone only starts Vite; without `php artisan serve` the page won't load.
 - Frontend build / single check: `npm run build`.
+- Never change the Unix file codification to Windows codification including LF to CRLF
 
 ## Testing
 - Backend: **Pest** — `./vendor/bin/pest` (or `./vendor/bin/pest --parallel`). Run `php artisan pest:install` once if config is missing.

@@ -77,10 +77,13 @@ final class Presentation extends Model
         return $this->hasMany(Template::class);
     }
 
-    /** @return HasMany<Asset, static> */
-    public function assets(): HasMany
+    /** @return BelongsToMany<Asset, static> */
+    public function assets(): BelongsToMany
     {
-        return $this->hasMany(Asset::class);
+        return $this->belongsToMany(Asset::class)
+            ->using(AssetPresentation::class)
+            ->withPivot('last_used_at')
+            ->withTimestamps();
     }
 
     /** @return BelongsToMany<User, static> */

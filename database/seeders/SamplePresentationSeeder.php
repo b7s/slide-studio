@@ -25,7 +25,7 @@ class SamplePresentationSeeder extends Seeder
             'slug' => 'presentation-demo',
             'deck_path' => '/presentation',
             'template_path' => '/templates',
-            'settings' => ['theme' => 'navy-gold'],
+            'settings' => ['theme' => 'navy-highlight'],
         ]);
 
         $slides = [

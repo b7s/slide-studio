@@ -1,8 +1,8 @@
 import * as React from "react";
-import { Slot } from "@radix-ui/react-slot";
-import { cva } from "class-variance-authority";
+import {Slot} from "@radix-ui/react-slot";
+import {cva} from "class-variance-authority";
 
-import { cn } from "../lib/utils";
+import {cn} from "../lib/utils";
 
 const buttonVariants = cva(
   "btn [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
@@ -15,7 +15,7 @@ const buttonVariants = cva(
       secondary: "btn-secondary",
       ghost: "btn-ghost",
       save: "btn-save",
-      gold: "btn-gold",
+      highlight: "btn-highlight",
     },
     size: {
       default: "",

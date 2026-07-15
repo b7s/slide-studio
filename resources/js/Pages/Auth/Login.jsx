@@ -1,13 +1,14 @@
-import { useState } from "react";
-import { Head, Link, usePage } from "@inertiajs/react";
-import { Button } from "../../Components/ui/button";
-import { Input } from "../../Components/ui/input";
-import { Label } from "../../Components/ui/label";
-import { __ } from "../../lib/i18n";
+import {useState} from "react";
+import {Head, Link, usePage} from "@inertiajs/react";
+import {Button} from "../../Components/ui/button";
+import {Input} from "../../Components/ui/input";
+import {Label} from "../../Components/ui/label";
+import {__} from "../../lib/i18n";
 
 export default function Login({ errors, status }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const app = usePage().props.app ?? { name: "Slide Studio", short: "SS" };
 
@@ -68,6 +69,17 @@ export default function Login({ errors, status }) {
                 autoComplete="current-password"
               />
             </div>
+            <label htmlFor="remember" className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] cursor-pointer select-none">
+              <input
+                id="remember"
+                type="checkbox"
+                name="remember"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="size-4 rounded border-[var(--border)] accent-[var(--highlight)]"
+              />
+              {__("messages.auth.remember_me")}
+            </label>
             <Button type="submit" className="w-full" disabled={submitting}>
               {__("messages.auth.login")}
             </Button>
@@ -76,7 +88,7 @@ export default function Login({ errors, status }) {
 
         <p className="mt-4 text-center text-sm text-[var(--muted-foreground)]">
           {__("messages.auth.no_account")}{" "}
-          <Link href="/register" className="font-medium text-[var(--gold)] hover:underline">
+          <Link href="/register" className="font-medium text-[var(--highlight)] hover:underline">
             {__("messages.auth.register")}
           </Link>
         </p>

@@ -1,20 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { router } from "@inertiajs/react";
-import { Button } from "../../Components/ui/button";
-import { Input } from "../../Components/ui/input";
-import { ScrollArea } from "../../Components/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../../Components/ui/select";
-import { Badge } from "../../Components/ui/badge";
-import { Search, ArrowUp, ArrowDown, Plus, Loader2 } from "lucide-react";
-import { fetchLibraryGroups, fetchPresentations, createPresentation } from "../../lib/api";
-import { route } from "../../lib/routes";
-import { __ } from "../../lib/i18n";
+import {useCallback, useEffect, useRef, useState} from "react";
+import {router} from "@inertiajs/react";
+import {Button} from "../../Components/ui/button";
+import {Input} from "../../Components/ui/input";
+import {ScrollArea} from "../../Components/ui/scroll-area";
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue,} from "../../Components/ui/select";
+import {Badge} from "../../Components/ui/badge";
+import {ArrowDown, ArrowUp, Loader2, Plus, Search} from "lucide-react";
+import {createPresentation, fetchLibraryGroups, fetchPresentations} from "../../lib/api";
+import {route} from "../../lib/routes";
+import {__} from "../../lib/i18n";
 import PresentationCover from "./PresentationCover";
 
 const PER_PAGE = 12;
@@ -148,7 +142,7 @@ export default function LibraryIndex() {
                     className={[
                       "flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition",
                       isActive
-                        ? "bg-[var(--accent)] text-[var(--foreground)] border border-[var(--gold)]/50"
+                        ? "bg-[var(--accent)] text-[var(--foreground)] border border-[var(--highlight)]/50"
                         : "border border-transparent text-[var(--muted-foreground)] hover:bg-[var(--secondary)]",
                     ].join(" ")}
                   >
@@ -228,7 +222,7 @@ export default function LibraryIndex() {
                     key={presentation.id}
                     type="button"
                     onClick={() => openPresentation(presentation)}
-                    className="group overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] text-left transition hover:bg-[var(--secondary)] hover:border-[var(--gold)]/40"
+                    className="group overflow-hidden rounded-xl border border-[var(--paper)] bg-[var(--paper)] text-left transition hover:bg-[var(--secondary)] hover:border-[var(--highlight)]/40"
                   >
                     <PresentationCover html={presentation.cover_html} />
                     <div className="flex items-start justify-between gap-2 p-3">

@@ -65,10 +65,10 @@ test('presentation settings are cast to an array', function () {
         'user_id' => User::factory()->create()->id,
         'title' => 'Demo',
         'slug' => 'demo-'.uniqid(),
-        'settings' => ['theme' => 'navy-gold'],
+        'settings' => ['theme' => 'navy-highlight'],
     ]);
 
-    expect($presentation->settings)->toBe(['theme' => 'navy-gold']);
+    expect($presentation->settings)->toBe(['theme' => 'navy-highlight']);
 });
 
 test('deleting a presentation cascades its slides', function () {

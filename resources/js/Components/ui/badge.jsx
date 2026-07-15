@@ -1,10 +1,10 @@
 import * as React from "react";
-import { cn } from "../lib/utils";
+import {cn} from "../lib/utils";
 
 function Badge({ className, variant = "default", ...props }) {
   const variants = {
     default: "border border-[var(--border)] bg-[var(--secondary)] text-[var(--foreground)]",
-    gold: "border border-[var(--gold)]/50 bg-[var(--accent)] text-[var(--accent-foreground)]",
+    highlight: "border border-[var(--highlight)]/50 bg-[var(--accent)] text-[var(--accent-foreground)]",
     success: "border border-[var(--success)]/20 bg-[var(--success)]/10 text-[var(--success)]",
     danger: "border border-[var(--red)]/20 bg-[var(--red)]/10 text-[var(--red)]",
     outline: "border border-[var(--border)] text-[var(--foreground)]",

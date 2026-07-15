@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-import { createSlideEditor } from "../editor/slideEditor";
+import {describe, expect, it, vi} from "vitest";
+import {createSlideEditor} from "../editor/slideEditor";
 
 // Mount a real `.slide` root so slideRoot() resolves to the wrapper and the
 // box is a child (mirrors SlideCanvas). snapshot() then serialises the box.
@@ -64,6 +64,50 @@ describe("slideEditor selection vs. edits", () => {
     expect(layer.querySelector("[data-slide-hover-leaf]").style.display).toBe("none");
     // …and the element is still untouched.
     expect(el.getAttribute("style") || "").not.toContain("outline");
+
+    engine.destroy();
+    root.remove();
+  });
+
+  it("exposes background styles so the Filler section can detect image/gradient modes", () => {
+    const root = mount();
+    const onSelection = vi.fn();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection });
+    const el = box(root);
+
+    el.style.backgroundImage = 'url("/storage/media/x.png")';
+    el.style.backgroundSize = "cover";
+    el.click();
+
+    const info = onSelection.mock.calls[0][0];
+    expect(info.styles.backgroundImage).toBe('url("/storage/media/x.png")');
+    expect(info.styles.backgroundSize).toBe("cover");
+
+    engine.destroy();
+    root.remove();
+  });
+
+  it("strips bogus attributes left by a corrupted style attribute when snapshotting", () => {
+    const root = mount();
+    const onChange = vi.fn();
+    const engine = createSlideEditor({ root, onChange, onSelection: vi.fn() });
+    const el = box(root);
+    // A box whose style attribute broke during an earlier serialisation: the
+    // stray URL/style fragments leak out as bogus attributes on the element.
+    el.setAttribute("slide-studio.testmedia", "");
+    el.setAttribute("asset.webp", "");
+    el.setAttribute("background-repeat:", "");
+    el.click();
+
+    // A drag triggers a snapshot (pushHistory -> onChange(html)).
+    el.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 120, clientY: 60 }));
+    el.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 125, clientY: 65 }));
+    el.dispatchEvent(new MouseEvent("pointerup", { bubbles: true, clientX: 125, clientY: 65 }));
+
+    const html = onChange.mock.calls.at(-1)?.[0];
+    expect(html).not.toContain("slide-studio.testmedia");
+    expect(html).not.toContain("asset.webp");
+    expect(html).not.toContain("background-repeat:");
 
     engine.destroy();
     root.remove();

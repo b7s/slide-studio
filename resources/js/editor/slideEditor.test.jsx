@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-import { createSlideEditor } from "./slideEditor";
+import {describe, expect, it, vi} from "vitest";
+import {createSlideEditor} from "./slideEditor";
 
 function makeRoot() {
   const root = document.createElement("div");
@@ -36,6 +36,68 @@ describe("slideEditor.duplicate", () => {
     expect(a.nextElementSibling.textContent).toBe("A");
     // Selection moved to the freshly duplicated box.
     expect(engine.getSelected()).toBe(a.nextElementSibling);
+
+    engine.destroy();
+  });
+
+  it("duplicates the whole box even when a nested child (e.g. a table cell) is selected", () => {
+    const { root } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+    const slide = root.querySelector(".slide");
+
+    // A positioned box containing a table; select the inner <td> (what a real
+    // click on a table would select).
+    const box = document.createElement("div");
+    box.style.position = "absolute";
+    box.style.left = "50px";
+    box.style.top = "40px";
+    box.style.width = "300px";
+    box.style.height = "120px";
+    const table = document.createElement("table");
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.textContent = "X";
+    tr.appendChild(td);
+    table.appendChild(tr);
+    box.appendChild(table);
+    slide.appendChild(box);
+
+    engine.select(td);
+    expect(engine.getSelected()).toBe(td);
+
+    const before = slide.children.length;
+    engine.duplicate();
+
+    // The clone is a sibling of the whole box, not a stray cell inside the row.
+    expect(slide.children.length).toBe(before + 1);
+    const clone = engine.getSelected();
+    expect(clone.tagName.toLowerCase()).toBe("div");
+    expect(clone.querySelector("table")).not.toBeNull();
+    // Offset by 16px from the original box position (50 -> 66).
+    expect(clone.style.left).toBe("66px");
+    expect(clone.style.top).toBe("56px");
+
+    engine.destroy();
+  });
+
+  it("offsets the duplicate so it does not sit on top of the original", () => {
+    const { root, a } = makeRoot();
+    const engine = createSlideEditor({
+      root,
+      onChange: vi.fn(),
+      onSelection: vi.fn(),
+    });
+
+    engine.select(a);
+    a.style.left = "100px";
+    a.style.top = "80px";
+    engine.duplicate();
+
+    const clone = engine.getSelected();
+    expect(clone).not.toBe(a);
+    // Nudged by 16px so the copy is visibly distinct, clamped to the slide.
+    expect(clone.style.left).toBe("116px");
+    expect(clone.style.top).toBe("96px");
 
     engine.destroy();
   });
@@ -182,6 +244,100 @@ describe("slideEditor.setTextColor", () => {
     expect(document.execCommand).toHaveBeenCalledWith("foreColor", false, "#22c55e");
 
     window.getSelection = realGetSelection;
+    engine.destroy();
+  });
+});
+
+describe("slideEditor.insertTable", () => {
+  it("inserts an absolutely-positioned box with the requested grid", () => {
+    const { root } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.insertTable(3, 2);
+
+    const slide = root.querySelector(".slide");
+    const boxes = slide.querySelectorAll(':scope > div');
+    const table = slide.querySelector("table");
+    expect(table).not.toBeNull();
+    expect(table.querySelectorAll("tr")).toHaveLength(3);
+    expect(table.querySelectorAll("tr:first-child td")).toHaveLength(2);
+    // The table is wrapped in a positioned box that becomes the selection.
+    expect(boxes.length).toBeGreaterThan(0);
+    expect(engine.getSelected()).not.toBeNull();
+    expect(engine.getSelected().style.position).toBe("absolute");
+
+    engine.destroy();
+  });
+
+  it("clamps out-of-range dimensions to sane bounds", () => {
+    const { root } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.insertTable(0, 99);
+
+    const table = root.querySelector("table");
+    expect(table.querySelectorAll("tr")).toHaveLength(1);
+    expect(table.querySelectorAll("td")).toHaveLength(20);
+
+    engine.destroy();
+  });
+});
+
+describe("slideEditor.insertImageBox", () => {
+  it("inserts a positioned box filled with the asset as a cover background", () => {
+    const { root } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.insertImageBox({ id: 7, url: "media/logo.svg" });
+
+    const box = engine.getSelected();
+    expect(box).not.toBeNull();
+    expect(box.style.position).toBe("absolute");
+    expect(box.style.backgroundImage).toContain("media/logo.svg");
+    expect(box.style.backgroundSize).toBe("contain");
+    expect(box.style.backgroundRepeat).toBe("no-repeat");
+
+    engine.destroy();
+  });
+
+  it("ignores a missing asset without inserting anything", () => {
+    const { root } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.insertImageBox(null);
+
+    expect(root.querySelector("table, [style*='background-image']")).toBeNull();
+    expect(engine.getSelected()).toBeNull();
+
+    engine.destroy();
+  });
+});
+
+describe("slideEditor icon sizing", () => {
+  it("makes the icon fill its box so it scales up and down on resize", () => {
+    const { root } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.insertIcon("arrow-down");
+    const box = engine.getSelected();
+    const svg = box.querySelector("svg");
+
+    // The glyph fills the wrapper (CSS 100%) so resizing the box scales it.
+    expect(svg.style.width).toBe("100%");
+    expect(svg.style.height).toBe("100%");
+
+    // Growing the icon resizes the box and keeps the glyph in sync.
+    engine.setIconSize(200);
+    expect(box.style.width).toBe("200px");
+    expect(box.style.height).toBe("200px");
+    expect(svg.getAttribute("width")).toBe("200");
+
+    // Shrinking it again also updates the box.
+    engine.setIconSize(48);
+    expect(box.style.width).toBe("48px");
+    expect(box.style.height).toBe("48px");
+    expect(svg.getAttribute("width")).toBe("48");
+
     engine.destroy();
   });
 });

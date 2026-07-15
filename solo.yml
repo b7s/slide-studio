@@ -1,0 +1,10 @@
+name: slide-studio
+icon: null
+processes:
+  Pail:
+    command: php artisan pail
+    working_dir: null
+    auto_start: false
+    auto_restart: false
+    restart_when_changed: []
+    env: {}

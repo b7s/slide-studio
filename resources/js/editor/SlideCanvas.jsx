@@ -1,4 +1,5 @@
-import { useEffect, useRef, useImperativeHandle, forwardRef } from "react";
+import {forwardRef, useEffect, useImperativeHandle, useRef} from "react";
+import {rewriteMediaUrlsToPreview} from "../lib/mediaUrl";
 
 /**
  * SlideCanvas — renders slide HTML inside an open Shadow DOM root. CSS from
@@ -49,7 +50,7 @@ li{margin:0}`;
     // elements size/position against it.
     shadowRef.current.innerHTML =
       `<style data-slide-base="1">${BASE_CSS}</style>` +
-      `<div class="slide" data-slide-root="1" style="position:relative;width:100%;height:100%;overflow:hidden">${html || ""}</div>`;
+      `<div class="slide" data-slide-root="1" style="position:relative;width:100%;height:100%;overflow:hidden">${rewriteMediaUrlsToPreview(html) || ""}</div>`;
     // Intentionally empty deps so this runs only on mount/remount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

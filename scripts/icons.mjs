@@ -21,9 +21,9 @@
  * NEVER hand-edit paths inside icons.config.js — they are derived. To update,
  * bump `lucide-react`, run `npm run icons`, and review the diff.
  */
-import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join, resolve } from "node:path";
+import {existsSync, readdirSync, readFileSync, writeFileSync} from "node:fs";
+import {fileURLToPath} from "node:url";
+import {dirname, join, resolve} from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
@@ -137,7 +137,7 @@ const header = `// AUTO-GENERATED — DO NOT EDIT.
 // whitelist in scripts/icons.mjs + (optionally) bump "lucide-react" in package.json,
 // then run the script and commit both the catalog file and (if you bumped) package.json.
 //
-// At runtime every entry in ICON_CATALOG becomes an inline SVG with data-g4-icon=1
+// At runtime every entry in ICON_CATALOG becomes an inline SVG with data-slide-icon=1
 // inside the slide DOM; the engine reads back the data-icon-name so the catalog
 // is the persistence contract for these decorations.
 

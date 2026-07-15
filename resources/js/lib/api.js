@@ -2,7 +2,7 @@
 // named routes shared via Inertia (see resources/js/lib/routes.js) — no path
 // is hardcoded here. Errors are surfaced as Error with a `code`.
 
-import { route } from "./routes";
+import {route} from "./routes";
 
 async function parseError(res) {
   try {
@@ -192,5 +192,63 @@ export async function removeShare(presentationSlug, userId) {
 export async function searchUsers(query) {
   const res = await fetch(route("usersSearch", { query: { q: query } }));
   if (!res.ok) throw new Error("users_search_failed");
+  return await res.json();
+}
+
+export async function fetchAccessiblePresentations() {
+  const res = await fetch(route("presentationsAccessible"));
+  if (!res.ok) throw new Error("presentations_accessible_failed");
+  const data = await res.json();
+  return data.presentations ?? [];
+}
+
+export async function fetchAssets({ presentation = null, sort = "last_used", dir = "desc", search = "" } = {}) {
+  const qs = new URLSearchParams();
+  if (presentation !== null && presentation !== "all") qs.set("presentation", String(presentation));
+  qs.set("sort", sort);
+  qs.set("dir", dir);
+  if (search) qs.set("search", search);
+  const res = await fetch(`${route("assetsIndex")}?${qs.toString()}`);
+  if (!res.ok) throw new Error("assets_fetch_failed");
+  const data = await res.json();
+  return data.data ?? [];
+}
+
+export async function uploadAsset(file, presentationId = null) {
+  const fd = new FormData();
+  fd.append("file", file);
+  if (presentationId !== null && presentationId !== "all") {
+    fd.append("presentation_id", String(presentationId));
+  }
+  const res = await fetch(route("assetsStore"), {
+    method: "POST",
+    headers: { Accept: "application/json" },
+    body: fd,
+  });
+  if (!res.ok) {
+    const err = new Error("asset_upload_failed");
+    err.detail = await parseError(res);
+    throw err;
+  }
+  const data = await res.json();
+  return data.data ?? data;
+}
+
+export async function touchAsset(assetId, presentationId) {
+  const res = await fetch(route("assetTouch", { asset: assetId }), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ presentation_id: presentationId }),
+  });
+  if (!res.ok) throw new Error("asset_touch_failed");
+  return await res.json();
+}
+
+export async function deleteAsset(assetId) {
+  const res = await fetch(route("assetDestroy", { asset: assetId }), {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error("asset_delete_failed");
   return await res.json();
 }

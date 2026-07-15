@@ -1,29 +1,16 @@
-import { useState } from "react";
-import { router, usePage } from "@inertiajs/react";
-import { Button } from "../Components/ui/button";
-import { Tabs, TabsList, TabsTrigger } from "../Components/ui/tabs";
-import { Badge } from "../Components/ui/badge";
-import { Tooltip, TooltipTrigger, TooltipContent } from "../Components/ui/tooltip";
-import { GenerateDialog } from "./GenerateDialog";
-import { ShareDialog } from "./ShareDialog";
-import {
-    PanelLeft,
-    FolderOpen,
-    HelpCircle,
-    Eye,
-    RotateCw,
-    Code2,
-    ArrowDownToLine,
-    SlidersHorizontal,
-    Sparkles,
-    Share2,
-    Library, PanelRight,
-} from "lucide-react";
-import { useEditorPanels } from "./EditorPanelsContext";
-import { useEditor } from "./EditorContext";
-import { __ } from "../lib/i18n";
-import { route } from "../lib/routes";
-import { cn } from "../Components/lib/utils";
+import {useState} from "react";
+import {router, usePage} from "@inertiajs/react";
+import {Button} from "../Components/ui/button";
+import {Tabs, TabsList, TabsTrigger} from "../Components/ui/tabs";
+import {Badge} from "../Components/ui/badge";
+import {Tooltip, TooltipContent, TooltipTrigger} from "../Components/ui/tooltip";
+import {GenerateDialog} from "./GenerateDialog";
+import {ShareDialog} from "./ShareDialog";
+import {Eye, FolderOpen, HelpCircle, Library, PanelLeft, PanelRight, Share2, Sparkles,} from "lucide-react";
+import {useEditor} from "./EditorContext";
+import {__} from "../lib/i18n";
+import {route} from "../lib/routes";
+import {cn} from "../Components/lib/utils";
 
 function IconTip({ label, children }) {
   return (
@@ -222,7 +209,7 @@ function UserMenu() {
   return (
     <div className="relative flex items-center gap-2 pl-2 border-l border-[var(--border)] ml-1">
       <div
-        className="grid size-7 place-items-center rounded-full bg-gradient-to-br from-[var(--gold)] to-[color-mix(in_srgb,var(--gold)_60%,white)] text-[10px] font-bold text-white"
+        className="grid size-7 place-items-center rounded-full bg-gradient-to-br from-[var(--highlight)] to-[color-mix(in_srgb,var(--highlight)_60%,white)] text-[10px] font-bold text-white"
         aria-hidden
       >
         {initials}

@@ -1,11 +1,11 @@
-import { useState } from "react";
-import { Bold, Italic, List, ListOrdered, Palette, Trash2 } from "lucide-react";
-import { Button } from "../Components/ui/button";
-import { Tooltip, TooltipTrigger, TooltipContent } from "../Components/ui/tooltip";
-import { Popover, PopoverTrigger, PopoverContent } from "../Components/ui/popover";
-import { __ } from "../lib/i18n";
-import { cn } from "../Components/lib/utils";
-import { toHex } from "../lib/color";
+import {useState} from "react";
+import {Bold, Italic, List, ListOrdered, Palette, Trash2} from "lucide-react";
+import {Button} from "../Components/ui/button";
+import {Tooltip, TooltipContent, TooltipTrigger} from "../Components/ui/tooltip";
+import {Popover, PopoverContent, PopoverTrigger} from "../Components/ui/popover";
+import {__} from "../lib/i18n";
+import {cn} from "../Components/lib/utils";
+import {toHex} from "../lib/color";
 
 function IconTip({ label, children }) {
   return (
@@ -90,7 +90,7 @@ export default function TextToolbar({ style, selection, cmd, side = "top", bound
               variant="ghost"
               size="icon-sm"
               aria-label={__("messages.editor.text_toolbar.list")}
-              className={cn("tool-icon", currentList && "text-[var(--gold-strong)]")}
+              className={cn("tool-icon", currentList && "text-[var(--highlight-strong)]")}
               onMouseDown={(e) => {
                 pd(e);
                 cmd.saveSelection();

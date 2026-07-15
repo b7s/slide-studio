@@ -1,11 +1,11 @@
-import { useState } from "react";
-import { Button } from "../Components/ui/button";
-import { Input } from "../Components/ui/input";
-import { ScrollArea } from "../Components/ui/scroll-area";
-import { Tooltip, TooltipTrigger, TooltipContent } from "../Components/ui/tooltip";
-import { List, Files, ChevronUp, ChevronDown, CopyPlus } from "lucide-react";
-import { useEditor } from "./EditorContext";
-import { __ } from "../lib/i18n";
+import {useState} from "react";
+import {Button} from "../Components/ui/button";
+import {Input} from "../Components/ui/input";
+import {ScrollArea} from "../Components/ui/scroll-area";
+import {Tooltip, TooltipContent, TooltipTrigger} from "../Components/ui/tooltip";
+import {ChevronDown, ChevronUp, CopyPlus, Files, List} from "lucide-react";
+import {useEditor} from "./EditorContext";
+import {__} from "../lib/i18n";
 
 export default function LeftPanel({ slides, selectedFile, onSelect, count }) {
   const { root, selectFile, duplicate, reorder, copyTemplate } = useEditor();
@@ -84,9 +84,9 @@ export default function LeftPanel({ slides, selectedFile, onSelect, count }) {
                      aria-current={active ? "true" : undefined}
                        className={[
                          "slide-item",
-                         active
-                           ? "border-[var(--gold)] bg-[var(--accent)]"
-                           : "border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)]",
+                          active
+                            ? "border-[var(--paper)] bg-[var(--paper)]"
+                            : "border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)]",
                        ].join(" ")}
                    >
                       <span className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-md bg-[var(--navy)]">
