@@ -111,6 +111,41 @@ test('POST save missing html returns 422 Problem+JSON with errors', function () 
         ->assertJsonStructure(['type', 'title', 'status', 'detail', 'instance', 'errors']);
 });
 
+test('POST /api/v1/slides creates a blank deck slide and audits it', function () {
+    $p = seedPresentation();
+
+    $expectedPosition = (int) Slide::query()->where('presentation_id', $p->id)->max('position') + 1;
+
+    $response = $this->postJson('/api/v1/slides', [
+        'presentation_id' => $p->id,
+    ]);
+
+    $response->assertCreated();
+    expect($response->json('data'))->toMatchArray([
+        'title' => 'Novo slide',
+        'source_mode' => SourceMode::Deck->value,
+    ]);
+    expect($response->json('data.file'))->toMatch('/\\.html$/');
+
+    $created = Slide::query()->where('filename', $response->json('data.file'))->first();
+    expect($created)->not->toBeNull();
+    expect($created->position)->toBe($expectedPosition);
+    expect($created->html)->toMatch('/<section class="slide"/');
+    expect(AuditLog::where('event', 'slide.created')->count())->toBe(1);
+});
+
+test('POST /api/v1/slides uses a custom title when provided', function () {
+    seedPresentation();
+
+    $response = $this->postJson('/api/v1/slides', [
+        'presentation_id' => Presentation::query()->first()->id,
+        'title' => 'Introdução',
+    ]);
+
+    $response->assertCreated();
+    expect($response->json('data.title'))->toBe('Introdução');
+});
+
 test('POST /api/v1/slides/{file}/duplicate creates a copy and audits it', function () {
     seedPresentation();
 
@@ -122,6 +157,28 @@ test('POST /api/v1/slides/{file}/duplicate creates a copy and audits it', functi
     $response->assertCreated();
     expect(Slide::where('filename', '03-c.html')->exists())->toBeTrue();
     expect(AuditLog::where('event', 'slide.duplicated')->count())->toBe(1);
+});
+
+test('POST /api/v1/slides/{file}/duplicate avoids colliding filenames in the deck', function () {
+    seedPresentation();
+    // Seed a second slide whose filename already exists in the deck so the
+    // duplicate must pick a unique slot rather than shadow it.
+    Slide::create([
+        'presentation_id' => Presentation::query()->first()->id,
+        'filename' => '01-a.html',
+        'title' => 'Existing',
+        'position' => 99,
+        'source_mode' => SourceMode::Deck,
+    ]);
+
+    $this->postJson('/api/v1/slides/01-a.html/duplicate', [
+        'filename' => '01-a.html',
+    ])->assertCreated();
+
+    // Two rows were already sharing `01-a.html` before this call; the
+    // duplicate must avoid that filename and live under a unique suffix.
+    expect(Slide::where('filename', '01-a.html')->count())->toBe(2);
+    expect(Slide::where('filename', '01-a-2.html')->exists())->toBeTrue();
 });
 
 test('POST /api/v1/reorder persists slide positions', function () {
@@ -184,6 +241,89 @@ test('POST /api/v1/slides/{file}/copy-to-deck requires a valid presentation_id',
     ]);
 
     $this->postJson('/api/v1/slides/tmpl-y.html/copy-to-deck', ['presentation_id' => 999999])
+        ->assertStatus(422)
+        ->assertJsonPath('status', 422);
+});
+
+test('DELETE /api/v1/slides/{file} removes the slide and renumbers the deck', function () {
+    $p = seedPresentation();
+    $p->slides()->where('filename', '01-a.html')->first()->update(['html' => '<section class="slide">A</section>']);
+
+    $this->deleteJson('/api/v1/slides/01-a.html')->assertOk();
+
+    expect(Slide::where('filename', '01-a.html')->exists())->toBeFalse();
+    // Gap closed: the former 02-b.html slides down into position 1.
+    expect(Slide::where('filename', '02-b.html')->first()->position)->toBe(1);
+    expect(AuditLog::where('event', 'slide.deleted')->count())->toBe(1);
+});
+
+test('POST /api/v1/slides/restore re-creates a deleted slide at its position', function () {
+    $p = seedPresentation();
+    $deleted = $p->slides()->where('filename', '02-b.html')->first();
+    $deleted->update(['html' => '<section class="slide">B</section>']);
+
+    $this->deleteJson('/api/v1/slides/02-b.html')->assertOk();
+
+    $restore = $this->postJson('/api/v1/slides/restore', [
+        'presentation_id' => $p->id,
+        'filename' => '02-b.html',
+        'title' => 'B',
+        'position' => 2,
+        'html' => '<section class="slide">B</section>',
+        'source_mode' => 'deck',
+    ]);
+
+    $restore->assertCreated();
+    expect(Slide::where('filename', '02-b.html')->exists())->toBeTrue();
+    // The restored slide keeps its original position, others shift down.
+    expect(Slide::where('filename', '02-b.html')->first()->position)->toBe(2);
+    expect(AuditLog::where('event', 'slide.restored')->count())->toBe(1);
+});
+
+test('POST /api/v1/slides/restore validates required fields', function () {
+    seedPresentation();
+
+    $this->postJson('/api/v1/slides/restore', ['presentation_id' => 1])
+        ->assertStatus(422)
+        ->assertJsonPath('status', 422);
+});
+
+test('POST /api/v1/slides/{file}/rename updates title and slugifies the filename', function () {
+    seedPresentation();
+
+    $response = $this->postJson('/api/v1/slides/01-a.html/rename', [
+        'title' => 'Apresentação Inicial',
+    ]);
+
+    $response->assertOk();
+    // accented characters are stripped to ASCII ("apresentacao-inicial.html").
+    expect(Slide::where('filename', '01-a.html')->first())->toBeNull();
+    expect(Slide::where('filename', 'apresentacao-inicial.html')->first()->title)->toBe('Apresentação Inicial');
+    expect(AuditLog::where('event', 'slide.renamed')->count())->toBe(1);
+});
+
+test('POST /api/v1/slides/{file}/rename avoids filename collisions in the same deck', function () {
+    $p = seedPresentation();
+    Slide::create([
+        'presentation_id' => $p->id,
+        'filename' => 'capa.html',
+        'title' => 'Capa',
+        'position' => 3,
+        'source_mode' => SourceMode::Deck,
+    ]);
+
+    $this->postJson('/api/v1/slides/01-a.html/rename', ['title' => 'Capa'])
+        ->assertOk();
+
+    // The new file gets a "-2" suffix because "capa.html" already exists.
+    expect(Slide::where('filename', 'capa.html')->count())->toBe(1);
+    expect(Slide::where('filename', 'capa-2.html')->exists())->toBeTrue();
+});
+
+test('POST /api/v1/slides/{file}/rename requires a title', function () {
+    seedPresentation();
+
+    $this->postJson('/api/v1/slides/01-a.html/rename', [])
         ->assertStatus(422)
         ->assertJsonPath('status', 422);
 });

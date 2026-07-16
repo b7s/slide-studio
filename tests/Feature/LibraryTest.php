@@ -166,12 +166,51 @@ test('user without membership on a team receives 403', function (): void {
 test('creating a presentation without a team uses the personal space', function (): void {
     [$user, $personal] = makeLibraryUser();
 
-    $this->actingAs($user)
+    $response = $this->actingAs($user)
         ->postJson(route('api.v1.library.store'), ['title' => null])
-        ->assertCreated()
-        ->assertJsonPath('title', 'Sem título');
+        ->assertCreated();
+
+    $expectedPrefix = __('messages.presentation.untitled').' '.now()->format('Y-m-d');
+    expect($response->json('title'))->toBe($expectedPrefix);
 
     expect(Presentation::query()->where('team_id', $personal->id)->count())->toBe(1);
+});
+
+test('creating a presentation seeds exactly one starter slide', function (): void {
+    [$user] = makeLibraryUser();
+
+    $response = $this->actingAs($user)
+        ->postJson(route('api.v1.library.store'), ['title' => 'Project Alpha'])
+        ->assertCreated()
+        ->assertJsonPath('title', 'Project Alpha');
+
+    $presentationId = $response->json('id');
+    expect(Slide::query()->where('presentation_id', $presentationId)->count())->toBe(1);
+    expect(Slide::query()->where('presentation_id', $presentationId)->first()->filename)->toBe('01-capa.html');
+});
+
+test('creating a presentation appends a number when the title already exists in the team', function (): void {
+    [$user] = makeLibraryUser();
+
+    $this->actingAs($user)->postJson(route('api.v1.library.store'), ['title' => 'Q3 Roadmap'])->assertCreated();
+    $second = $this->actingAs($user)->postJson(route('api.v1.library.store'), ['title' => 'Q3 Roadmap'])->assertCreated();
+    expect($second->json('title'))->toBe('Q3 Roadmap 2');
+
+    $third = $this->actingAs($user)->postJson(route('api.v1.library.store'), ['title' => 'Q3 Roadmap'])->assertCreated();
+    expect($third->json('title'))->toBe('Q3 Roadmap 3');
+});
+
+test('default title with the date is suffixed on collision within the same day', function (): void {
+    [$user] = makeLibraryUser();
+
+    $expectedToday = sprintf('%s %s', __('messages.presentation.untitled'), now()->format('Y-m-d'));
+    // First call picks the base default title (no collision in a fresh team).
+    $first = $this->actingAs($user)->postJson(route('api.v1.library.store'), ['title' => null])->assertCreated();
+    expect($first->json('title'))->toBe($expectedToday);
+
+    // A second call on the same day collides with the first and is suffixed.
+    $second = $this->actingAs($user)->postJson(route('api.v1.library.store'), ['title' => null])->assertCreated();
+    expect($second->json('title'))->toBe($expectedToday.' 2');
 });
 
 test('creating a presentation in a team the user belongs to works', function (): void {

@@ -3,14 +3,21 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Slide\CopyTemplateToDeck;
+use App\Actions\Slide\CreateSlide;
+use App\Actions\Slide\DeleteSlide;
 use App\Actions\Slide\DuplicateSlide;
+use App\Actions\Slide\RenameSlide;
 use App\Actions\Slide\ReorderSlides;
+use App\Actions\Slide\RestoreSlide;
 use App\Actions\Slide\SaveSlide;
 use App\Enums\Slide\SourceMode;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Slide\CopyTemplateRequest;
+use App\Http\Requests\Slide\CreateSlideRequest;
 use App\Http\Requests\Slide\DuplicateSlideRequest;
+use App\Http\Requests\Slide\RenameSlideRequest;
 use App\Http\Requests\Slide\ReorderSlidesRequest;
+use App\Http\Requests\Slide\RestoreSlideRequest;
 use App\Http\Requests\Slide\SaveSlideRequest;
 use App\Http\Resources\SlideResource;
 use App\Models\Presentation;
@@ -32,6 +39,9 @@ final class SlideController extends Controller
             $query->where('source_mode', SourceMode::Template);
         } else {
             $query->where('source_mode', SourceMode::Deck);
+            if ($request->filled('presentation_id')) {
+                $query->where('presentation_id', (int) $request->query('presentation_id'));
+            }
         }
 
         return response()->json([
@@ -42,10 +52,20 @@ final class SlideController extends Controller
         ]);
     }
 
+    public function create(CreateSlideRequest $request, CreateSlide $action): JsonResponse
+    {
+        $slide = $action($request->payload());
+
+        return new SlideResource($slide)->response()->setStatusCode(201);
+    }
+
     public function htmlByFile(Request $request): Response
     {
-        $file = (string) $request->query('file', '');
-        $slide = Slide::query()->where('filename', $file)->firstOrFail();
+        $query = Slide::query()->where('filename', (string) $request->query('file', ''));
+        if ($request->filled('presentation_id')) {
+            $query->where('presentation_id', (int) $request->query('presentation_id'));
+        }
+        $slide = $query->firstOrFail();
 
         return response((string) $slide->html)->header('Content-Type', 'text/html; charset=utf-8');
     }
@@ -88,5 +108,26 @@ final class SlideController extends Controller
         $action($presentation, $payload);
 
         return response()->json(['ok' => true]);
+    }
+
+    public function destroy(Slide $slide, DeleteSlide $action): JsonResponse
+    {
+        $action($slide);
+
+        return response()->json(['ok' => true]);
+    }
+
+    public function restore(RestoreSlideRequest $request, RestoreSlide $action): JsonResponse
+    {
+        $slide = $action($request->payload());
+
+        return new SlideResource($slide)->response()->setStatusCode(201);
+    }
+
+    public function rename(RenameSlideRequest $request, Slide $slide, RenameSlide $action): JsonResponse
+    {
+        $renamed = $action($slide, (string) $request->input('title'));
+
+        return new SlideResource($renamed)->response()->setStatusCode(200);
     }
 }

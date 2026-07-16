@@ -7,6 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
+import {router} from "@inertiajs/react";
+import {route} from "../lib/routes";
 import * as api from "../lib/api";
 import { toast } from "sonner";
 import { __ } from "../lib/i18n";
@@ -22,12 +24,14 @@ export function EditorProvider({
   initialSlides = [],
   presentationId = null,
   presentationSlug = null,
+  presentationTitle = null,
   initialFile = null,
   permissions = { role: "viewer", canEdit: false, canShare: false, canDelete: false },
 }) {
   const [root, setRoot] = useState("deck");
   const deckRoot = config.deckRoot ?? "";
   const templateRoot = config.templateRoot ?? "";
+  const [presentationTitleState, setPresentationTitle] = useState(presentationTitle);
   const [slides, setSlides] = useState(() =>
     initialSlides.map((s) => ({
       file: s.file,
@@ -74,10 +78,18 @@ export function EditorProvider({
   htmlRef.current = html;
   revisionRef.current = revision;
   savedSnapshotRef.current = savedSnapshot;
+  // Sync the cross-action refs when the parent swaps the presentation (e.g.
+  // navigating from one `/presentations/<slug>` to another inside the same SPA
+  // session). Even though `<EditorProvider key={presentationId}>` already
+  // forces a remount, defensive syncing protects against subtle ordering bugs
+  // and future call sites that might bypass the `key`.
+  presentationIdRef.current = presentationId;
+  presentationSlugRef.current = presentationSlug;
+
 
   const loadSlides = useCallback(async (nextRoot) => {
     try {
-      const list = await api.fetchSlides(nextRoot);
+      const list = await api.fetchSlides(nextRoot, presentationIdRef.current);
       setSlides(list);
     } catch {
       setStatusKey("messages.editor.load_error");
@@ -113,7 +125,7 @@ export function EditorProvider({
         html: body,
         revision: overwrite ? null : revisionRef.current,
         overwrite,
-      });
+      }, presentationIdRef.current);
       setRevision(data.revision ?? null);
       revisionRef.current = data.revision ?? null;
       setSavedSnapshot(body);
@@ -164,7 +176,7 @@ export function EditorProvider({
       setStatusTone("loading");
       const meta = slides.find((s) => s.file === file);
       try {
-        const content = await api.fetchSlideHtml(file);
+        const content = await api.fetchSlideHtml(file, presentationIdRef.current);
         setHtml(content);
         setSavedSnapshot(content);
         setLoadNonce((n) => n + 1);
@@ -180,23 +192,25 @@ export function EditorProvider({
   );
 
   const duplicate = useCallback(
-    async (name) => {
-      const file = selectedFileRef.current;
+    async (file, name) => {
       if (!file || !name) return;
+      if (!permissions?.canEdit) return;
       setStatusKey("messages.editor.saving");
       setStatusTone("loading");
       try {
-        const copy = await api.duplicateSlide(file, { filename: name, title: null });
+        const copy = await api.duplicateSlide(file, { filename: name, title: null }, presentationIdRef.current);
         await loadSlides(root);
         await selectFile(copy.file);
         setStatusKey("messages.editor.duplicated");
         setStatusTone("success");
+        toast.success(__("messages.editor.duplicated"));
       } catch {
         setStatusKey("messages.editor.duplicate_error");
         setStatusTone("error");
+        toast.error(__("messages.editor.duplicate_error"));
       }
     },
-    [loadSlides, root, selectFile]
+    [loadSlides, root, permissions, selectFile]
   );
 
   const reorder = useCallback(
@@ -216,6 +230,212 @@ export function EditorProvider({
   const reload = useCallback(() => {
     selectFile(selectedFileRef.current);
   }, [selectFile]);
+
+  const createSlide = useCallback(
+    async (title = null) => {
+      const presentationId = presentationIdRef.current;
+      if (!presentationId) return;
+      if (!permissions?.canEdit) return;
+      setStatusKey("messages.editor.saving");
+      setStatusTone("loading");
+      try {
+        const created = await api.createSlide(presentationId, { title });
+        await loadSlides(root);
+        await selectFile(created.file);
+        setStatusKey("messages.editor.created");
+        setStatusTone("success");
+        toast.success(__("messages.editor.created"));
+      } catch {
+        setStatusKey("messages.editor.create_error");
+        setStatusTone("error");
+        toast.error(__("messages.editor.create_error"));
+      }
+    },
+    [loadSlides, root, permissions, selectFile]
+  );
+
+  // Structural operation history (slide create/delete/reorder). Content edits
+  // are owned by the canvas engine; this stack reverses deck-level changes via
+  // Ctrl+Z / Ctrl+Y so a removed slide can be brought back.
+  const undoStackRef = useRef([]);
+  const redoStackRef = useRef([]);
+  const historyBusyRef = useRef(false);
+
+  const selectFallback = useCallback(
+    (list, removedFile) => {
+      if (list.length === 0) return null;
+      const idx = list.findIndex((s) => s.file === removedFile);
+      const next = idx > 0 ? list[idx - 1] : list[0];
+      return next?.file ?? list[0].file;
+    },
+    []
+  );
+
+  const deleteSlide = useCallback(
+    async (file) => {
+      const presentationId = presentationIdRef.current;
+      if (!presentationId || !file) return;
+      if (!permissions?.canEdit) return;
+      if (historyBusyRef.current) return;
+      const snapshot = slides.find((s) => s.file === file);
+      if (!snapshot) return;
+
+      historyBusyRef.current = true;
+      setStatusKey("messages.editor.saving");
+      setStatusTone("loading");
+      try {
+        await api.deleteSlide(file, presentationIdRef.current);
+        undoStackRef.current.push({ type: "delete", slide: snapshot });
+        redoStackRef.current = [];
+        await loadSlides(root);
+        const fallback = selectFallback(slides, file);
+        if (selectedFileRef.current === file && fallback) selectFile(fallback);
+        setStatusKey("messages.editor.deleted");
+        setStatusTone("success");
+        toast.success(__("messages.editor.deleted"));
+      } catch {
+        setStatusKey("messages.editor.delete_error");
+        setStatusTone("error");
+        toast.error(__("messages.editor.delete_error"));
+      } finally {
+        historyBusyRef.current = false;
+      }
+    },
+    [slides, root, permissions, loadSlides, selectFile, selectFallback]
+  );
+
+  const undo = useCallback(async () => {
+    if (historyBusyRef.current) return true;
+    const entry = undoStackRef.current.pop();
+    if (!entry) return false;
+    if (entry.type === "delete") {
+      historyBusyRef.current = true;
+      try {
+        const restored = await api.restoreSlide({
+          presentationId: presentationIdRef.current,
+          filename: entry.slide.file,
+          title: entry.slide.title,
+          position: parseInt(entry.slide.number, 10) || 1,
+          html: entry.slide.html,
+          sourceMode: entry.slide.source_mode,
+          revision: entry.slide.revision,
+        });
+        redoStackRef.current.push(entry);
+        await loadSlides(root);
+        await selectFile(restored.file);
+        setStatusKey("messages.editor.restored");
+        setStatusTone("success");
+        toast.success(__("messages.editor.restored"));
+      } catch {
+        undoStackRef.current.push(entry);
+        setStatusKey("messages.editor.restore_error");
+        setStatusTone("error");
+        toast.error(__("messages.editor.restore_error"));
+      } finally {
+        historyBusyRef.current = false;
+      }
+    }
+    return true;
+  }, [root, loadSlides, selectFile]);
+
+  const redo = useCallback(async () => {
+    if (historyBusyRef.current) return true;
+    const entry = redoStackRef.current.pop();
+    if (!entry) return false;
+    if (entry.type === "delete") {
+      historyBusyRef.current = true;
+      try {
+        await api.deleteSlide(entry.slide.file, presentationIdRef.current);
+        undoStackRef.current.push(entry);
+        await loadSlides(root);
+        const fallback = selectFallback(slides, entry.slide.file);
+        if (selectedFileRef.current === entry.slide.file && fallback) selectFile(fallback);
+        setStatusKey("messages.editor.deleted");
+        setStatusTone("success");
+        toast.success(__("messages.editor.deleted"));
+      } catch {
+        redoStackRef.current.push(entry);
+        setStatusKey("messages.editor.delete_error");
+        setStatusTone("error");
+        toast.error(__("messages.editor.delete_error"));
+      } finally {
+        historyBusyRef.current = false;
+      }
+    }
+    return true;
+  }, [slides, root, loadSlides, selectFile, selectFallback]);
+
+  const renameSlide = useCallback(async (file, title) => {
+    if (!file || !title?.trim()) return;
+    if (!permissions?.canEdit) return;
+    setStatusKey("messages.editor.saving");
+    setStatusTone("loading");
+    try {
+      const renamed = await api.renameSlide(file, { title: title.trim() }, presentationIdRef.current);
+      setSlides((prev) =>
+        prev.map((s) =>
+          s.file === file
+            ? { ...s, file: renamed.file, title: renamed.title, revision: renamed.revision }
+            : s
+        )
+      );
+      if (selectedFileRef.current === file) {
+        await selectFile(renamed.file);
+      }
+      // A rename invalidates the structural undo history because file keys
+      // change; clear it so a stale "delete" can't resurrect under the old
+      // filename.
+      undoStackRef.current = [];
+      redoStackRef.current = [];
+      setStatusKey("messages.editor.renamed");
+      setStatusTone("success");
+      toast.success(__("messages.editor.renamed"));
+    } catch {
+      setStatusKey("messages.editor.rename_error");
+      setStatusTone("error");
+      toast.error(__("messages.editor.rename_error"));
+    }
+  }, [permissions, selectFile]);
+
+  // Rename the current presentation. Update both the local title state and the
+  // persisted record; slug/title changes are server-authoritative. The server
+  // also regenerates the slug from the title, so a reload on the OLD URL
+  // would 404 against Presentation::where(slug, ...). After a successful
+  // rename we replace the current URL with the new one so the user's URL bar
+  // (and a manual reload) reflects the new presentation.
+  //
+  // Inertia v3 caveat: `router.replace(props)` only replaces client-side
+  // props — it does NOT change the URL. To change the URL we use
+  // `router.visit(url, { replace: true })`, which swaps the current history
+  // entry instead of pushing a new one (so the back button still works).
+  const renamePresentation = useCallback(async (title) => {
+    const slug = presentationSlugRef.current;
+    const trimmed = title?.trim();
+    if (!slug || !trimmed) return;
+    if (!permissions?.canEdit) return;
+    setStatusKey("messages.editor.saving");
+    setStatusTone("loading");
+    try {
+      const updated = await api.renamePresentation(slug, { title: trimmed });
+      const newTitle = updated?.title ?? trimmed;
+      const newSlug = updated?.slug ?? null;
+      if (newTitle) setPresentationTitle(newTitle);
+
+      // If the slug changed, swap the URL in place so a reload still resolves
+      // the route binding against the NEW presentation URL.
+      if (newSlug && newSlug !== slug) {
+        presentationSlugRef.current = newSlug;
+        router.visit(route("editor", { presentation: newSlug }), { replace: true });
+      }
+      setStatusKey("messages.presentation.renamed");
+      setStatusTone("success");
+      toast.success(__("messages.presentation.renamed"));
+    } catch {
+      setStatusKey("messages.presentation.rename_error");
+      setStatusTone("error");
+      toast.error(__("messages.presentation.rename_error"));
+    }
+  }, [permissions]);
 
   // Copy a template slide into the current presentation's deck. Templates mode
   // lists slides with source_mode = Template; this materialises a new deck
@@ -246,9 +466,10 @@ export function EditorProvider({
 
   const preview = useCallback(async () => {
     const file = selectedFileRef.current;
+    const presentationId = presentationIdRef.current;
     if (!file) return;
     try {
-      const html = await api.fetchSlideHtml(file);
+      const html = await api.fetchSlideHtml(file, presentationId);
       const doc = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -268,7 +489,7 @@ html,body{width:100%;min-height:100dvh;background:#0d1b2a;display:flex;align-ite
       window.open(URL.createObjectURL(blob), "_blank");
     } catch {
       // fallback: open raw URL
-      window.open(api.slideHtmlUrl(file), "_blank");
+      window.open(api.slideHtmlUrl(file, presentationId), "_blank");
     }
   }, []);
 
@@ -450,7 +671,7 @@ html,body{width:100%;min-height:100dvh;background:#0d1b2a;display:flex;align-ite
       if (body === savedSnapshotRef.current) return;
       // sendBeacon is the only reliable unload flush; the async save below is a
       // best-effort fallback for environments without sendBeacon.
-      const sent = api.saveSlideBeacon(file, { html: body, revision: null, overwrite: true });
+      const sent = api.saveSlideBeacon(file, { html: body, revision: null, overwrite: true }, presentationIdRef.current);
       if (!sent) save(true);
     };
     window.addEventListener("pagehide", flush);
@@ -493,6 +714,7 @@ html,body{width:100%;min-height:100dvh;background:#0d1b2a;display:flex;align-ite
       generate,
       presentationId,
       presentationSlug,
+      presentationTitle: presentationTitleState,
       permissions,
       slideKey: loadNonce,
       deckRoot,
@@ -503,6 +725,12 @@ html,body{width:100%;min-height:100dvh;background:#0d1b2a;display:flex;align-ite
       cmd,
       slideFullscreen,
       toggleSlideFullscreen,
+      createSlide,
+      deleteSlide,
+      renameSlide,
+      renamePresentation,
+      undo,
+      redo,
     }),
     [
       root,
@@ -526,6 +754,7 @@ html,body{width:100%;min-height:100dvh;background:#0d1b2a;display:flex;align-ite
       generate,
       presentationId,
       presentationSlug,
+      presentationTitleState,
       permissions,
       loadNonce,
       deckRoot,
@@ -534,6 +763,12 @@ html,body{width:100%;min-height:100dvh;background:#0d1b2a;display:flex;align-ite
       registerEngine,
       onEngineSelection,
       cmd,
+      createSlide,
+      deleteSlide,
+      renameSlide,
+      renamePresentation,
+      undo,
+      redo,
     ]
   );
 

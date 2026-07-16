@@ -4,6 +4,7 @@ namespace App\Actions\Presentation;
 
 use App\Enums\Slide\SourceMode;
 use App\Models\Presentation;
+use App\Models\Slide;
 use App\Models\Team;
 use App\Services\Audit;
 use Illuminate\Support\Facades\DB;
@@ -23,16 +24,7 @@ final class CreateStarterPresentation
 
             $presentation = Presentation::createForTeam($team, $title);
             $presentation->update(['settings' => ['theme' => 'navy-highlight']]);
-
-            $presentation->slides()->create([
-                'position' => 1,
-                'source_mode' => SourceMode::Deck,
-                'filename' => '01-capa.html',
-                'title' => 'Capa',
-                'html' => '<section class="slide" data-file="01-capa.html">'
-                    .'<h1>Bem-vindo</h1><p>Edite este slide ou crie um novo.</p>'
-                    .'</section>',
-            ]);
+            self::seed($presentation);
 
             Audit::record('presentation.created', $presentation, [
                 'team_id' => $team->id,
@@ -41,5 +33,24 @@ final class CreateStarterPresentation
 
             return $presentation;
         });
+    }
+
+    /**
+     * Seed a single, blank "Capa" slide at position 1. Shared by the
+     * first-login starter and the regular "new presentation" path so every
+     * freshly-minted presentation opens with exactly one slide as a
+     * reference; the user then adds more via the editor's Add Slide button.
+     */
+    public static function seed(Presentation $presentation): Slide
+    {
+        return $presentation->slides()->create([
+            'position' => 1,
+            'source_mode' => SourceMode::Deck,
+            'filename' => '01-capa.html',
+            'title' => 'Capa',
+            'html' => '<section class="slide" data-file="01-capa.html">'
+                .'<h1>Bem-vindo</h1><p>Edite este slide ou crie um novo.</p>'
+                .'</section>',
+        ]);
     }
 }

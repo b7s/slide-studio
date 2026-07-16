@@ -1,4 +1,4 @@
-import {createElement, useEffect, useRef, useState} from "react";
+import {createElement, useCallback, useEffect, useRef, useState} from "react";
 import {Button} from "../Components/ui/button";
 import {Badge} from "../Components/ui/badge";
 import {Tooltip, TooltipContent, TooltipTrigger} from "../Components/ui/tooltip";
@@ -22,6 +22,7 @@ import {
     CornerUpRight,
     FilesIcon,
     Group as GroupIcon,
+    GripVertical,
     ImagePlus,
     Loader2,
     Maximize,
@@ -74,6 +75,8 @@ export default function Workspace() {
     slideFullscreen,
     toggleSlideFullscreen,
     presentationId,
+    undo: undoStructural,
+    redo: redoStructural,
   } = useEditor();
 
   const stageRef = useRef(null);
@@ -85,11 +88,29 @@ export default function Workspace() {
   const editModeRef = useRef(editMode);
   const slideFullscreenRef = useRef(slideFullscreen);
   const toggleSlideFullscreenRef = useRef(toggleSlideFullscreen);
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 });
   onHtmlChangeRef.current = onHtmlChange;
   onSelectionRef.current = onEngineSelection;
   editModeRef.current = editMode;
   slideFullscreenRef.current = slideFullscreen;
   toggleSlideFullscreenRef.current = toggleSlideFullscreen;
+  const undoRef = useRef(undoStructural);
+  const redoRef = useRef(redoStructural);
+  undoRef.current = undoStructural;
+  redoRef.current = redoStructural;
+
+  // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y first revert deck-level changes (slide
+  // removal, etc.) recorded in the structural history; only when that stack is
+  // empty does the canvas engine's own content undo run.
+  const runUndo = useCallback(async () => {
+    const handled = await undoRef.current();
+    if (!handled && engineRef.current?.undo) engineRef.current.undo();
+  }, []);
+  const runRedo = useCallback(async () => {
+    const handled = await redoRef.current();
+    if (!handled && engineRef.current?.redo) engineRef.current.redo();
+  }, []);
   const [zoom, setZoom] = useState(100);
   const [menu, setMenu] = useState(null);
   const [iconOpen, setIconOpen] = useState(false);
@@ -100,8 +121,50 @@ export default function Workspace() {
   // Floating text toolbar: visible while a box is in text-edit mode. `rect` is
   // the selected box's viewport rect (emitted by the engine on enter/move).
   const [textToolbar, setTextToolbar] = useState({ active: false, rect: null });
+  const [pan, setPan] = useState({ active: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 });
 
   const readOnly = !(permissions?.canEdit ?? false);
+
+  const onPanStart = useCallback((e) => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    e.preventDefault();
+    setPan({ active: true, startX: e.clientX, startY: e.clientY, scrollLeft: stage.scrollLeft, scrollTop: stage.scrollTop });
+    stage.style.cursor = "grabbing";
+    document.body.style.cursor = "grabbing";
+    document.body.style.userSelect = "none";
+  }, []);
+
+  const onPanMove = useCallback((e) => {
+    if (!pan.active) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+    const dx = e.clientX - pan.startX;
+    const dy = e.clientY - pan.startY;
+    stage.scrollLeft = pan.scrollLeft - dx;
+    stage.scrollTop = pan.scrollTop - dy;
+  }, [pan.active, pan.startX, pan.startY, pan.scrollLeft, pan.scrollTop]);
+
+  const onPanEnd = useCallback(() => {
+    const stage = stageRef.current;
+    if (stage) {
+      stage.style.cursor = "";
+    }
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    setPan({ active: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 });
+  }, []);
+
+  useEffect(() => {
+    if (pan.active) {
+      window.addEventListener("pointermove", onPanMove);
+      window.addEventListener("pointerup", onPanEnd);
+      return () => {
+        window.removeEventListener("pointermove", onPanMove);
+        window.removeEventListener("pointerup", onPanEnd);
+      };
+    }
+  }, [pan.active, onPanMove, onPanEnd]);
 
   useEffect(() => {
     const el = stageRef.current;
@@ -147,6 +210,7 @@ export default function Workspace() {
       if (disposed) return;
       engine = createSlideEditor({
         root: shadow,
+        stage: stageRef.current,
         onChange: (h) => onHtmlChangeRef.current(h),
         onSelection: (info) => onSelectionRef.current(info),
         onEditingChange: () => {},
@@ -178,16 +242,16 @@ export default function Workspace() {
       const engine = engineRef.current;
       if (!engine) return;
       const mod = e.ctrlKey || e.metaKey;
-      // Undo/redo always work even when editing text
+      // Undo/redo: structural history first, then canvas content undo.
       if (mod && e.key.toLowerCase() === "z") {
         e.preventDefault();
-        if (e.shiftKey) engine.redo();
-        else engine.undo();
+        if (e.shiftKey) runRedo();
+        else runUndo();
         return;
       }
       if (mod && e.key.toLowerCase() === "y") {
         e.preventDefault();
-        engine.redo();
+        runRedo();
         return;
       }
       // F2 toggles text-edit mode on the selected box (PowerPoint-style).
@@ -296,15 +360,24 @@ export default function Workspace() {
         </button>
       )}
       {!slideFullscreen && (
-      <div className="pointer-events-none absolute inset-x-0 top-4 z-10 flex items-center justify-between px-4">
+      <div className="absolute inset-x-0 top-4 z-10 flex items-center justify-between px-4">
+        {/* Pan grip handle */}
+        <div
+          className="flex items-center px-2 cursor-grab active:cursor-grabbing select-none"
+          onPointerDown={onPanStart}
+          aria-label={__("messages.workspace.pan_canvas")}
+          title={__("messages.workspace.pan_canvas")}
+        >
+          <GripVertical className="size-4 text-[var(--muted-foreground)]/50 hover:text-[var(--muted-foreground)]" />
+        </div>
         <div className="toolbar-group">
           <IconTip label={__("messages.workspace.undo")}>
-            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.undo")} onClick={cmd.undo} className="tool-icon">
+            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.undo")} onClick={runUndo} className="tool-icon">
               <Undo2 />
             </Button>
           </IconTip>
           <IconTip label={__("messages.workspace.redo")}>
-            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.redo")} onClick={cmd.redo} className="tool-icon">
+            <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.redo")} onClick={runRedo} className="tool-icon">
               <Redo2 />
             </Button>
           </IconTip>

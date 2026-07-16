@@ -22,8 +22,10 @@ final class EditorController extends Controller
             abort_unless($presentation->user_id === $user->id || $presentation->sharedUsers()->where('user_id', $user->id)->exists(), 403);
         } else {
             $presentation = Presentation::query()
-                ->where('team_id', $user->current_team_id)
-                ->orWhereHas('sharedUsers', fn ($q) => $q->where('user_id', $user->id))
+                ->where(function ($q) use ($user) {
+                    $q->where('team_id', $user->current_team_id)
+                        ->orWhereHas('sharedUsers', fn ($sub) => $sub->where('user_id', $user->id));
+                })
                 ->with('slides')
                 ->first();
 
@@ -55,6 +57,7 @@ final class EditorController extends Controller
             ])->values()->all(),
             'presentationId' => $presentation->id,
             'presentationSlug' => $presentation->slug,
+            'presentationTitle' => $presentation->title,
             'selectedFile' => $slides->first()?->filename,
             'permissions' => [
                 'role' => $role->value,

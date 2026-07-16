@@ -6,6 +6,8 @@ import {Badge} from "../Components/ui/badge";
 import {Tooltip, TooltipContent, TooltipTrigger} from "../Components/ui/tooltip";
 import {GenerateDialog} from "./GenerateDialog";
 import {ShareDialog} from "./ShareDialog";
+import RenameSlideDialog from "./RenameSlideDialog";
+import RenamePresentationDialog from "./RenamePresentationDialog";
 import {Eye, FolderOpen, HelpCircle, Library, PanelLeft, PanelRight, Share2, Sparkles,} from "lucide-react";
 import {useEditor} from "./EditorContext";
 import {__} from "../lib/i18n";
@@ -43,12 +45,17 @@ export default function Topbar({
   onReload,
   onPreview,
 }) {
-  const { dirty, save, reload, preview, generate, presentationSlug, permissions } = useEditor();
+  const { dirty, save, reload, preview, generate, presentationSlug, presentationTitle, permissions, slides, renameSlide, renamePresentation } = useEditor();
+  const app = usePage().props.app ?? { name: "Slide Studio", short: "SS" };
   const effectiveDirty = unsaved ?? dirty;
   const [generateOpen, setGenerateOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renamePresentationOpen, setRenamePresentationOpen] = useState(false);
   const canShare = permissions?.canShare ?? false;
   const readOnly = !(permissions?.canEdit ?? false);
+  const currentSlide = selectedFile ? slides?.find((s) => s.file === selectedFile) : null;
+  const renameInitial = currentSlide?.title || selectedFile || "";
 
   return (
     <header className={cn("z-30 col-span-full flex flex-wrap items-center justify-between gap-2 panel p-2.5 sm:px-4", className)}>
@@ -84,11 +91,33 @@ export default function Topbar({
           <div className="brand-icon size-9">
             <span className="text-sm font-bold text-white">{app.short}</span>
           </div>
-          <div className="min-w-0">
-            <h1 className="text-sm font-semibold leading-tight">{app.name}</h1>
-            <p className="truncate text-[11px] font-medium text-[var(--muted-foreground)]">
-              {selectedFile || deckPath || __("messages.topbar.loading_presentation")}
-            </p>
+          <div className="min-w-0 max-w-[min(60vw,240px)]">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => { if (!readOnly && presentationTitle) setRenamePresentationOpen(true); }}
+                  disabled={readOnly || !presentationTitle}
+                  className="-mx-1 -my-0.5 block w-[calc(100%+0.5rem)] truncate rounded px-1 py-0.5 text-left text-sm font-semibold leading-tight transition-colors hover:bg-[var(--secondary)] disabled:cursor-default disabled:hover:bg-transparent"
+                >
+                  {presentationTitle ?? app.name}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{presentationTitle ?? app.name}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={() => { if (selectedFile) setRenameOpen(true); }}
+                  disabled={!selectedFile || readOnly}
+                  className="-mx-1 -my-0.5 block w-[calc(100%+0.5rem)] truncate rounded px-1 py-0.5 text-left text-[11px] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--secondary)] hover:text-[var(--foreground)] disabled:cursor-default disabled:hover:bg-transparent"
+                >
+                  {selectedFile || deckPath || __("messages.topbar.loading_presentation")}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{selectedFile || deckPath || __("messages.topbar.loading_presentation")}</TooltipContent>
+            </Tooltip>
           </div>
           <Badge>{__("messages.topbar.local_badge")}</Badge>
           <IconTip label={__("messages.library.title")}>
@@ -178,6 +207,25 @@ export default function Topbar({
         onClose={() => setShareOpen(false)}
         presentationSlug={presentationSlug}
         canShare={canShare}
+      />
+      <RenameSlideDialog
+        open={renameOpen}
+        initialTitle={renameInitial}
+        onClose={() => setRenameOpen(false)}
+        onRename={(title) => {
+          const file = selectedFile;
+          setRenameOpen(false);
+          if (file) renameSlide(file, title);
+        }}
+      />
+      <RenamePresentationDialog
+        open={renamePresentationOpen}
+        initialTitle={presentationTitle ?? ""}
+        onClose={() => setRenamePresentationOpen(false)}
+        onRename={(title) => {
+          setRenamePresentationOpen(false);
+          renamePresentation(title);
+        }}
       />
     </header>
   );

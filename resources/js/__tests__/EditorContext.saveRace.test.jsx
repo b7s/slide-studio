@@ -97,7 +97,7 @@ describe("EditorProvider save race", () => {
       html: SHORT_HTML,
       revision: null,
       overwrite: true,
-    });
+    }, 1);
 
     // Edit B (long) and request another save while the first is still pending.
     // No second concurrent request must start.
@@ -116,7 +116,7 @@ describe("EditorProvider save race", () => {
       html: LONG_HTML,
       revision: null,
       overwrite: true,
-    });
+    }, 1);
 
     // The final persisted snapshot is the newest content, so it is not dirty.
     await waitFor(() => expect(screen.getByTestId("dirty").textContent).toBe("false"));

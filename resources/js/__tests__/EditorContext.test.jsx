@@ -3,6 +3,22 @@ import { render, screen, act, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { EditorProvider, useEditor } from "../editor/EditorContext";
 import { toast } from "sonner";
+import { setRoutes } from "../lib/routes";
+
+// Inertia v3 renamed `router.replace(url)` to `router.visit(url, { replace })`.
+// Capture both visit invocations and the `replace` flag they pass so the
+// rename test can verify the URL was swapped in place.
+const {inertiaRouter} = vi.hoisted(() => ({
+  inertiaRouter: {
+    visit: vi.fn(),
+    replace: vi.fn(),
+    get: vi.fn(),
+    post: vi.fn(),
+  },
+}));
+vi.mock("@inertiajs/react", () => ({
+  router: inertiaRouter,
+}));
 
 // Sonner is a DOM/browser concern irrelevant to logic tests.
 vi.mock("sonner", () => ({
@@ -24,6 +40,7 @@ vi.mock("../lib/api", () => ({
   updateShare: vi.fn(),
   removeShare: vi.fn(),
   searchUsers: vi.fn(),
+  renamePresentation: vi.fn(),
 }));
 
 import * as api from "../lib/api";
@@ -48,6 +65,10 @@ function Harness() {
       <button data-testid="copy" onClick={() => e.copyTemplate("tmpl.html")}>
         copy
       </button>
+      <span data-testid="presentation-title">{e.presentationTitle ?? ""}</span>
+      <button data-testid="rename-presentation" onClick={() => e.renamePresentation("Renamed")}>
+        rename presentation
+      </button>
     </div>
   );
 }
@@ -58,6 +79,14 @@ function renderEditor(overrides = {}) {
   ]);
   api.fetchSlideHtml.mockResolvedValue(SAMPLE_HTML);
   api.saveSlide.mockResolvedValue({ revision: "r2" });
+  // Seed a real route map so URL building (`route("editor", { presentation })`)
+  // produces a string that contains the slug — what we expect router.replace
+  // to be called with after a rename.
+  setRoutes({
+    editor: "/presentations/__PRESENTATION__",
+    presentationToken: "__PRESENTATION__",
+    slideToken: "__FILE__",
+  });
 
   return render(
     <EditorProvider
@@ -84,7 +113,7 @@ describe("EditorProvider", () => {
   it("loads the initial slide and marks it not-dirty", async () => {
     renderEditor();
 
-    await waitFor(() => expect(api.fetchSlideHtml).toHaveBeenCalledWith("s1.html"));
+    await waitFor(() => expect(api.fetchSlideHtml).toHaveBeenCalledWith("s1.html", 1));
 
     expect(screen.getByTestId("selected").textContent).toBe("s1.html");
     expect(screen.getByTestId("dirty").textContent).toBe("false");
@@ -105,7 +134,7 @@ describe("EditorProvider", () => {
       html: "<div>edited</div>",
       revision: "r1",
       overwrite: false,
-    });
+    }, 1);
     await waitFor(() =>
       expect(screen.getByTestId("status").textContent).toBe("messages.editor.saved")
     );
@@ -160,7 +189,54 @@ describe("EditorProvider", () => {
     await waitFor(() =>
       expect(toast.success).toHaveBeenCalledWith("messages.templates.copied")
     );
-    expect(api.fetchSlides).toHaveBeenCalledWith("deck");
-    expect(api.fetchSlideHtml).toHaveBeenCalledWith("new-slide.html");
+    expect(api.fetchSlides).toHaveBeenCalledWith("deck", 1);
+    expect(api.fetchSlideHtml).toHaveBeenCalledWith("new-slide.html", 1);
+  });
+
+  it("renames the presentation and mirrors the new title locally", async () => {
+    api.renamePresentation.mockResolvedValue({ title: "Renamed Deck", slug: "renamed-deck" });
+    renderEditor({
+      presentationTitle: "Original Deck",
+    });
+
+    await waitFor(() => expect(screen.getByTestId("presentation-title").textContent).toBe("Original Deck"));
+
+    await userEvent.click(screen.getByTestId("rename-presentation"));
+
+    await waitFor(() =>
+      expect(api.renamePresentation).toHaveBeenCalledWith("deck", { title: "Renamed" })
+    );
+    // The server regenerated the slug → the URL must be swapped (via
+    // router.visit with { replace: true } in Inertia v3) so a reload resolves
+    // the route binding against the NEW presentation URL.
+    await waitFor(() => expect(inertiaRouter.visit).toHaveBeenCalled());
+    const [url, opts] = inertiaRouter.visit.mock.calls[0];
+    expect(url).toContain("renamed-deck");
+    expect(opts).toMatchObject({ replace: true });
+    expect(toast.success).toHaveBeenCalledWith("messages.presentation.renamed");
+  });
+
+  it("does not replace the URL when the slug did not change", async () => {
+    api.renamePresentation.mockResolvedValue({ title: "Still Original", slug: "deck" });
+    renderEditor({
+      presentationTitle: "Original Deck",
+    });
+
+    await waitFor(() => expect(screen.getByTestId("presentation-title").textContent).toBe("Original Deck"));
+    await userEvent.click(screen.getByTestId("rename-presentation"));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("messages.presentation.renamed"));
+
+    expect(inertiaRouter.visit).not.toHaveBeenCalled();
+  });
+
+  it("does not call the API when the reader is read-only", async () => {
+    renderEditor({
+      permissions: { role: "viewer", canEdit: false, canShare: false, canDelete: false },
+    });
+
+    await waitFor(() => expect(api.fetchSlideHtml).toHaveBeenCalled());
+    await userEvent.click(screen.getByTestId("rename-presentation"));
+
+    expect(api.renamePresentation).not.toHaveBeenCalled();
   });
 });

@@ -12,8 +12,10 @@ async function parseError(res) {
   }
 }
 
-export async function fetchSlides(root = "deck") {
-  const res = await fetch(route("slidesIndex", { query: { root } }));
+export async function fetchSlides(root = "deck", presentationId = null) {
+  const query = { root };
+  if (presentationId !== null) query.presentation_id = presentationId;
+  const res = await fetch(route("slidesIndex", { query }));
   if (!res.ok) throw new Error("slides.fetch_failed");
   const data = await res.json();
   return (data.slides ?? []).map((s) => ({
@@ -22,21 +24,28 @@ export async function fetchSlides(root = "deck") {
     number: String(s.number),
     revision: s.revision ?? null,
     source_mode: s.source_mode,
+    html: s.html ?? "",
   }));
 }
 
-export async function fetchSlideHtml(file) {
-  const res = await fetch(route("slidesHtml", { query: { file } }));
+export async function fetchSlideHtml(file, presentationId = null) {
+  const query = { file };
+  if (presentationId !== null) query.presentation_id = presentationId;
+  const res = await fetch(route("slidesHtml", { query }));
   if (!res.ok) throw new Error("slides.html_failed");
   return await res.text();
 }
 
-export function slideHtmlUrl(file) {
-  return route("slidesHtml", { query: { file } });
+export function slideHtmlUrl(file, presentationId = null) {
+  const query = { file };
+  if (presentationId !== null) query.presentation_id = presentationId;
+  return route("slidesHtml", { query });
 }
 
-export async function saveSlide(file, { html, revision = null, overwrite = false }) {
-  const res = await fetch(route("slideSave", { slide: file }), {
+export async function saveSlide(file, { html, revision = null, overwrite = false }, presentationId = null) {
+  const query = {};
+  if (presentationId !== null) query.presentation_id = presentationId;
+  const res = await fetch(route("slideSave", { slide: file, query }), {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ html, revision, overwrite }),
@@ -60,11 +69,13 @@ export async function saveSlide(file, { html, revision = null, overwrite = false
 // async `fetch` is almost always aborted before it completes, which silently drops
 // the user's last edits. The /api/v1 group has no CSRF middleware, so the beacon
 // (which cannot set custom headers) is accepted using the session cookie alone.
-export function saveSlideBeacon(file, { html, revision = null, overwrite = true }) {
+export function saveSlideBeacon(file, { html, revision = null, overwrite = true }, presentationId = null) {
   if (typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function") {
     return false;
   }
-  const url = route("slideSave", { slide: file });
+  const query = {};
+  if (presentationId !== null) query.presentation_id = presentationId;
+  const url = route("slideSave", { slide: file, query });
   const payload = JSON.stringify({ html, revision, overwrite });
   try {
     return navigator.sendBeacon(url, new Blob([payload], { type: "application/json" }));
@@ -73,8 +84,86 @@ export function saveSlideBeacon(file, { html, revision = null, overwrite = true 
   }
 }
 
-export async function duplicateSlide(file, { filename, title = null }) {
-  const res = await fetch(route("slideDuplicate", { slide: file }), {
+export async function deleteSlide(file, presentationId = null) {
+  const query = {};
+  if (presentationId !== null) query.presentation_id = presentationId;
+  const res = await fetch(route("slideDelete", { slide: file, query }), {
+    method: "DELETE",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error("delete_slide_failed");
+  return true;
+}
+
+export async function restoreSlide({ presentationId, filename, title, position, html, sourceMode, revision = null }) {
+  const res = await fetch(route("slidesRestore"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      presentation_id: presentationId,
+      filename,
+      title,
+      position,
+      html,
+      source_mode: sourceMode,
+      revision,
+    }),
+  });
+  if (!res.ok) throw new Error("restore_slide_failed");
+  const body = await res.json();
+  const data = body.data ?? body;
+  return {
+    file: data.file,
+    title: data.title,
+    number: String(data.number),
+    revision: data.revision ?? null,
+    source_mode: data.source_mode,
+    html: data.html ?? "",
+  };
+}
+
+export async function renameSlide(file, { title }, presentationId = null) {
+  const query = {};
+  if (presentationId !== null) query.presentation_id = presentationId;
+  const res = await fetch(route("slidesRename", { slide: file, query }), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) throw new Error("rename_slide_failed");
+  const body = await res.json();
+  const data = body.data ?? body;
+  return {
+    file: data.file,
+    title: data.title,
+    number: String(data.number),
+    revision: data.revision ?? null,
+    source_mode: data.source_mode,
+    html: data.html ?? "",
+  };
+}
+
+export async function createSlide(presentationId, { title = null } = {}) {
+  const res = await fetch(route("slidesCreate"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ presentation_id: presentationId, title }),
+  });
+  if (!res.ok) throw new Error("create_slide_failed");
+  const body = await res.json();
+  const data = body.data ?? body;
+  return {
+    file: data.file,
+    title: data.title,
+    number: String(data.number),
+    revision: data.revision ?? null,
+    source_mode: data.source_mode,
+  };
+}
+export async function duplicateSlide(file, { filename, title = null }, presentationId = null) {
+  const query = {};
+  if (presentationId !== null) query.presentation_id = presentationId;
+  const res = await fetch(route("slideDuplicate", { slide: file, query }), {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ filename, title }),
@@ -130,6 +219,21 @@ export async function createPresentation({ title = null, teamId = null } = {}) {
     body: JSON.stringify({ title, team_id: teamId }),
   });
   if (!res.ok) throw new Error("create_presentation_failed");
+  return await res.json();
+}
+
+export async function renamePresentation(slug, { title }) {
+  const res = await fetch(route("presentationRename", { presentation: slug }), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) {
+    const err = new Error("rename_presentation_failed");
+    err.status = res.status;
+    err.detail = await parseError(res);
+    throw err;
+  }
   return await res.json();
 }
 

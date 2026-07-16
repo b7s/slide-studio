@@ -48,7 +48,7 @@ function parseBox(el) {
   };
 }
 
-export function createSlideEditor({ root, onChange, onSelection, onEditingChange, onTextEditingChange, onContextMenu }) {
+export function createSlideEditor({ root, stage, onChange, onSelection, onEditingChange, onTextEditingChange, onContextMenu }) {
   let selected = null;
   let editing = false;
   let textEditing = false;
@@ -63,6 +63,29 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
   let clipboard = null;
   let drag = null;
   let resize = null;
+
+  const stageEl = stage; // scrollable container for auto-scroll during drag
+
+  // Auto-scroll the stage when pointer is near edges during drag/resize
+  function autoScrollStage(clientX, clientY) {
+    if (!stageEl) return;
+    const rect = stageEl.getBoundingClientRect();
+    const margin = 60; // px from edge to start scrolling
+    const speed = 24;  // px per frame
+
+    // Horizontal
+    if (clientX - rect.left < margin) {
+      stageEl.scrollLeft = Math.max(0, stageEl.scrollLeft - speed);
+    } else if (rect.right - clientX < margin) {
+      stageEl.scrollLeft += speed;
+    }
+    // Vertical
+    if (clientY - rect.top < margin) {
+      stageEl.scrollTop = Math.max(0, stageEl.scrollTop - speed);
+    } else if (rect.bottom - clientY < margin) {
+      stageEl.scrollTop += speed;
+    }
+  }
 
   const slideRoot = () =>
     root.querySelector("[data-slide], .slide, .slide-root") || root.firstElementChild || root;
@@ -626,6 +649,9 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
       if (pos.includes("w")) { w = box.w - dx; x = box.x + dx; }
       if (pos.includes("n")) { h = box.h - dy; y = box.y + dy; }
       applyBox({ x, y, w: Math.max(8, w), h: Math.max(8, h) });
+
+      // Auto-scroll stage when resizing near edges
+      autoScrollStage(e.clientX, e.clientY);
     } else if (drag) {
       drag.moved = true;
       const nx = drag.baseX + (e.clientX - drag.startX);
@@ -633,6 +659,9 @@ export function createSlideEditor({ root, onChange, onSelection, onEditingChange
       selected.style.left = `${nx}px`;
       selected.style.top = `${ny}px`;
       selected.style.position = selected.style.position || "absolute";
+
+      // Auto-scroll stage when dragging near edges
+      autoScrollStage(e.clientX, e.clientY);
     }
     positionOverlay();
   }
