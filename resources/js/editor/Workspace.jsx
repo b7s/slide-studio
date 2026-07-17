@@ -326,6 +326,7 @@ export default function Workspace() {
     if (presentationId) touchAsset(asset.id, presentationId).catch(() => {});
   };
 
+  const hasGroup = !!(selection && selection.isGroup);
   const contextItems = menu && menu.hasSelection ? [
     { icon: <ClipboardCopy className="size-3.5" />, label: __("messages.context_menu.duplicate"), onClick: cmd.duplicate },
     { separator: true },
@@ -335,8 +336,8 @@ export default function Workspace() {
     { separator: true },
     { icon: <CornerUpRight className="size-3.5" />, label: __("messages.context_menu.bring_forward"), onClick: cmd.bringForward },
     { icon: <CornerUpLeft className="size-3.5" />, label: __("messages.context_menu.send_backward"), onClick: cmd.sendBackward },
-    { icon: <GroupIcon className="size-3.5" />, label: __("messages.context_menu.group"), onClick: cmd.group },
-    { icon: <Ungroup className="size-3.5" />, label: __("messages.context_menu.ungroup"), onClick: cmd.ungroup },
+    { icon: <GroupIcon className="size-3.5" />, label: __("messages.context_menu.group"), onClick: cmd.group, disabled: !(selection && selection.count >= 2) },
+    { icon: <Ungroup className="size-3.5" />, label: __("messages.context_menu.ungroup"), onClick: cmd.ungroup, disabled: !hasGroup },
     { separator: true },
     { icon: <Trash2 className="size-3.5" />, label: __("messages.context_menu.delete"), onClick: cmd.remove, danger: true },
   ] : [

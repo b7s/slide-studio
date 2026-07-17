@@ -340,4 +340,151 @@ describe("slideEditor icon sizing", () => {
 
     engine.destroy();
   });
+
+  it("preserves the multi-selection when right-clicking an already-selected box", () => {
+    const { root, a, b } = makePositionedRoot();
+    document.body.appendChild(root);
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.select(a);
+    engine.select(b, { additive: true });
+    expect(engine.getSelectionSet()).toHaveLength(2);
+
+    // Right-click on `b` (already selected) must keep both boxes selected.
+    const ctx = new MouseEvent("contextmenu", { bubbles: true });
+    Object.defineProperty(ctx, "target", { value: b });
+    root.dispatchEvent(ctx);
+
+    expect(engine.getSelectionSet()).toHaveLength(2);
+    expect(engine.getSelectionSet()).toContain(a);
+    expect(engine.getSelectionSet()).toContain(b);
+
+    engine.destroy();
+  });
+});
+
+function makePositionedRoot() {
+  const root = document.createElement("div");
+  const slide = document.createElement("div");
+  slide.className = "slide";
+  slide.style.position = "relative";
+  const mk = (id, x, y) => {
+    const el = document.createElement("div");
+    el.setAttribute("data-id", id);
+    el.style.position = "absolute";
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    el.style.width = "100px";
+    el.style.height = "60px";
+    slide.appendChild(el);
+    return el;
+  };
+  const a = mk("a", 100, 100);
+  const b = mk("b", 300, 100);
+  const c = mk("c", 500, 200);
+  root.appendChild(slide);
+  return { root, slide, a, b, c };
+}
+
+describe("slideEditor multi-select + group/ungroup", () => {
+  it("ctrl/cmd+click toggles boxes into a multi-selection", () => {
+    const { root, a, b } = makePositionedRoot();
+    document.body.appendChild(root);
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.select(a);
+    engine.select(b, { additive: true });
+
+    const set = engine.getSelectionSet();
+    expect(set).toContain(a);
+    expect(set).toContain(b);
+    expect(set).toHaveLength(2);
+
+    // Toggling off removes the box.
+    engine.select(b, { additive: true });
+    expect(engine.getSelectionSet()).toHaveLength(1);
+    expect(engine.getSelectionSet()).toContain(a);
+
+    engine.destroy();
+  });
+
+  it("group wraps all selected boxes into one wrapper preserving absolute positions", () => {
+    const { root, slide, a, b } = makePositionedRoot();
+    document.body.appendChild(root);
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.select(a);
+    engine.select(b, { additive: true });
+    engine.group();
+
+    const wrap = engine.getSelected();
+    expect(wrap.getAttribute("data-slide-group")).toBe("1");
+    expect(wrap.parentElement).toBe(slide);
+    // Both boxes now live inside the wrapper.
+    expect(wrap.contains(a)).toBe(true);
+    expect(wrap.contains(b)).toBe(true);
+    // Positions are preserved relative to the wrapper origin (offset by 100).
+    expect(parseFloat(a.style.left)).toBe(0);
+    expect(parseFloat(b.style.left)).toBe(200); // 300 - 100
+    // wrapper bounds all children
+    expect(parseFloat(wrap.style.left)).toBe(100);
+    expect(parseFloat(wrap.style.top)).toBe(100);
+    expect(parseFloat(wrap.style.width)).toBe(300); // 100..400
+
+    engine.destroy();
+  });
+
+  it("ungroup releases children back to the slide with slide-space coordinates", () => {
+    const { root, slide, a, b } = makePositionedRoot();
+    document.body.appendChild(root);
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.select(a);
+    engine.select(b, { additive: true });
+    engine.group();
+    const wrap = engine.getSelected();
+    engine.ungroup();
+
+    expect(slide.querySelector("[data-slide-group]")).toBeNull();
+    // Children restored to absolute slide coordinates.
+    expect(parseFloat(a.style.left)).toBe(100);
+    expect(parseFloat(a.style.top)).toBe(100);
+    expect(parseFloat(b.style.left)).toBe(300);
+    expect(parseFloat(b.style.top)).toBe(100);
+    expect(slide.contains(a)).toBe(true);
+    expect(slide.contains(b)).toBe(true);
+    expect(wrap.isConnected).toBe(false);
+
+    engine.destroy();
+  });
+
+  it("descends into a selected group when ctrl+clicking a child", () => {
+    const { root, a, b } = makePositionedRoot();
+    document.body.appendChild(root);
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    // Put a labelled child inside `a` so we can descend to it.
+    const child = document.createElement("div");
+    child.setAttribute("data-child", "1");
+    child.style.position = "absolute";
+    child.style.left = "10px";
+    child.style.top = "10px";
+    a.appendChild(child);
+
+    engine.select(a);
+    engine.select(b, { additive: true });
+    engine.group();
+    const wrap = engine.getSelected();
+
+    // Simulate a ctrl+click on the child inside the group.
+    const click = new MouseEvent("click", { bubbles: true, ctrlKey: true });
+    Object.defineProperty(click, "target", { value: child });
+    root.dispatchEvent(click);
+
+    // Selection is now the child (descended), not the whole group.
+    expect(engine.getSelected()).toBe(child);
+    expect(engine.getSelectionSet()).toContain(wrap);
+
+    engine.destroy();
+  });
 });

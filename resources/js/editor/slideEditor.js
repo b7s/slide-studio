@@ -55,7 +55,11 @@ function parseBox(el) {
 }
 
 export function createSlideEditor({ root, stage, onChange, onSelection, onEditingChange, onTextEditingChange, onContextMenu }) {
+  // `selected` is the *primary* element (last clicked) — kept for Inspector
+  // compatibility. `selectedSet` is the full multi-selection (array, ordered by
+  // click order). Ctrl/Cmd+click toggles membership; a plain click replaces it.
   let selected = null;
+  let selectedSet = [];
   let editing = false;
   let textEditing = false;
   // Remembers the cursor each box had before we forced the I-beam during a
@@ -63,6 +67,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
   // into the saved HTML).
   const editPrevCursor = new WeakMap();
   let overlay = null;
+  let selectionLayer = null;
   let hoverLayer = null;
   let history = [];
   let histIndex = -1;
@@ -184,6 +189,9 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     onSelection({
       tag: selected.tagName.toLowerCase(),
       path,
+      isGroup: !!(selected.getAttribute && selected.getAttribute("data-slide-group")),
+      multi: selectedSet.filter((el) => el.isConnected).length > 1,
+      count: selectedSet.filter((el) => el.isConnected).length,
       text: (selected.textContent || "").trim().slice(0, 60),
       box,
       styles: {
@@ -343,8 +351,22 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     return ov;
   }
 
-  // Apply a highlight outline + matching handle fill so the selection reads
-  // consistently in the editor accent colour.
+  // Secondary selection frames: one light outline per *additional* selected
+  // element (everything except the primary), drawn in a dedicated layer so they
+  // never persist into the saved HTML and never steal pointer events.
+  function buildSelectionLayer() {
+    const layer = document.createElement("div");
+    layer.setAttribute("data-slide-selection-layer", "1");
+    layer.style.position = "absolute";
+    layer.style.inset = "0";
+    layer.style.pointerEvents = "none";
+    layer.style.zIndex = "2147483645";
+    root.appendChild(layer);
+    return layer;
+  }
+
+  // Apply a highlight outline + matching handle fill so the primary selection
+  // reads consistently in the editor accent colour.
   function updateOverlayColor() {
     if (!overlay || !selected) return;
     overlay.style.border = `2px solid ${HIGHLIGHT}`;
@@ -363,20 +385,48 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     return map[pos] || "default";
   }
 
-  function positionOverlay() {
-    if (!overlay || !selected) return;
-    const r = selected.getBoundingClientRect();
+  // Convert a viewport rect into the overlay's local (unscaled) coordinate space.
+  function localRectOf(rect) {
     const host = root.host ?? root;
     const sr = host.getBoundingClientRect();
-    // The host may carry a CSS transform (zoom) — its layout box
-    // (`offsetWidth`/`offsetHeight`) is unscaled, so `sr.width` divided by
-    // that is the scale factor. Convert the post-transform screen delta
-    // into the unscaled local coordinate space the overlay lives in.
     const scale = sr.width > 0 ? sr.width / Math.max(1, host.offsetWidth) : 1;
-    const x = (r.left - sr.left) / scale;
-    const y = (r.top - sr.top) / scale;
-    const w = r.width / scale;
-    const h = r.height / scale;
+    return {
+      x: (rect.left - sr.left) / scale,
+      y: (rect.top - sr.top) / scale,
+      w: rect.width / scale,
+      h: rect.height / scale,
+    };
+  }
+
+  // Frame every selected element except the primary. Secondary frames use a
+  // lighter 1.5px accent so the primary (with handles) stays the clear focus.
+  function positionSelectionLayer() {
+    if (!selectionLayer) return;
+    selectionLayer.innerHTML = "";
+    const others = selectedSet.filter((el) => el !== selected && el.isConnected);
+    others.forEach((el) => {
+      const { x, y, w, h } = localRectOf(el.getBoundingClientRect());
+      const frame = document.createElement("div");
+      frame.style.position = "absolute";
+      frame.style.boxSizing = "border-box";
+      frame.style.pointerEvents = "none";
+      frame.style.border = `1.5px solid ${HIGHLIGHT}`;
+      frame.style.borderRadius = "3px";
+      frame.style.left = `${x}px`;
+      frame.style.top = `${y}px`;
+      frame.style.width = `${w}px`;
+      frame.style.height = `${h}px`;
+      selectionLayer.appendChild(frame);
+    });
+  }
+
+  function positionOverlay() {
+    if (!overlay || !selected) {
+      positionSelectionLayer();
+      return;
+    }
+    const r = selected.getBoundingClientRect();
+    const { x, y, w, h } = localRectOf(r);
     overlay.style.left = `${x}px`;
     overlay.style.top = `${y}px`;
     overlay.style.width = `${w}px`;
@@ -388,6 +438,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
       handle.style.left = `${hx - 5}px`;
       handle.style.top = `${hy - 5}px`;
     });
+    positionSelectionLayer();
     if (onTextEditingChange) updateToolbar();
   }
 
@@ -500,7 +551,11 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     updateToolbar();
   }
 
-  function select(el) {
+  // Select an element. Pass `{ additive: true }` (Ctrl/Cmd+click) to toggle the
+  // element in/out of the multi-selection instead of replacing it. The primary
+  // `selected` is always the last-clicked element so Inspector commands keep
+  // targeting a single, predictable box.
+  function select(el, { additive = false } = {}) {
     if (!el || el === root || el === slideRoot() || el.getAttribute("data-slide-overlay") !== null) {
       clearSelection();
       return;
@@ -508,25 +563,65 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     // Switching to a different element drops any explicit text-edit session so
     // the floating toolbar hides instead of sticking to the wrong box.
     if (selected && selected !== el && textEditing) exitTextEdit();
-    selected = el;
+
+    if (additive) {
+      const i = selectedSet.indexOf(el);
+      if (i >= 0) {
+        selectedSet.splice(i, 1);
+        if (selected === el) selected = selectedSet[selectedSet.length - 1] || null;
+      } else {
+        selectedSet.push(el);
+        selected = el;
+      }
+    } else {
+      selectedSet = [el];
+      selected = el;
+    }
+
     clearHoverOutlines();
     if (overlay) overlay.style.display = "block";
     else overlay = buildOverlay();
+    if (!selectionLayer) selectionLayer = buildSelectionLayer();
     updateOverlayColor();
     // In edit mode every box is directly editable: the toolbar shows on
     // selection and the box becomes contenteditable + focused for direct typing.
+    if (editing && selected) setEditable(true);
+    positionOverlay();
+    selectionInfo();
+    updateToolbar();
+  }
+
+  function setMultiSelected(els) {
+    const clean = els.filter((e) => e && e.isConnected && e !== root && e !== slideRoot());
+    if (clean.length === 0) {
+      clearSelection();
+      return;
+    }
+    selectedSet = clean;
+    selected = clean[clean.length - 1];
+    clearHoverOutlines();
+    if (overlay) overlay.style.display = "block";
+    else overlay = buildOverlay();
+    if (!selectionLayer) selectionLayer = buildSelectionLayer();
+    updateOverlayColor();
     if (editing) setEditable(true);
     positionOverlay();
     selectionInfo();
     updateToolbar();
   }
 
+  function getSelectionSet() {
+    return selectedSet.filter((el) => el.isConnected);
+  }
+
   function clearSelection() {
     if (selected && editing) setEditable(false);
     if (textEditing) exitTextEdit();
     selected = null;
+    selectedSet = [];
     clearHoverOutlines();
     if (overlay) overlay.style.display = "none";
+    if (selectionLayer) selectionLayer.innerHTML = "";
     onSelection(null);
     updateToolbar();
   }
@@ -549,15 +644,24 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
   // interaction style — we remember the previous inline value so it can be
   // restored on pointer-up and never leaks into the saved HTML.
   function beginDrag(e) {
-    // Only explicitly-positioned boxes are draggable. Flow/inline elements
-    // (e.g. a <b>/<span> selected for text editing) have no left/top of their
-    // own, so turning them into an absolute box on drag would teleport them to
-    // the parent's origin. Leave those alone — they're edited, not moved.
-    if (!selected.style.left && !selected.style.top) return;
+    // When multiple boxes are selected, drag them all together by the same delta.
+    // Each member keeps its own relative position so the group geometry is
+    // preserved. A box without explicit left/top is not draggable on its own.
+    const members = getSelectionSet().filter((el) => el.style.left || el.style.top || (el.style.position && el.style.position !== "static"));
+    const targets = members.length ? members : (selected ? [selected] : []);
+    if (targets.length === 0) return;
     const sel = window.getSelection && window.getSelection();
     if (sel) sel.removeAllRanges();
-    const prevUserSelect = selected.style.userSelect;
-    selected.style.userSelect = "none";
+    const group = targets.map((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        el,
+        prevUserSelect: el.style.userSelect,
+        baseX: num(el.style.left) || num(cs.left) || 0,
+        baseY: num(el.style.top) || num(cs.top) || 0,
+      };
+    });
+    group.forEach((m) => { m.el.style.userSelect = "none"; });
     const cs = getComputedStyle(selected);
     drag = {
       startX: e.clientX,
@@ -565,7 +669,8 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
       baseX: num(selected.style.left) || num(cs.left) || 0,
       baseY: num(selected.style.top) || num(cs.top) || 0,
       moved: false,
-      prevUserSelect,
+      prevUserSelect: selected.style.userSelect,
+      group,
     };
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
@@ -657,11 +762,15 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
       autoScrollStage(e.clientX, e.clientY);
     } else if (drag) {
       drag.moved = true;
-      const nx = drag.baseX + (e.clientX - drag.startX);
-      const ny = drag.baseY + (e.clientY - drag.startY);
-      selected.style.left = `${nx}px`;
-      selected.style.top = `${ny}px`;
-      selected.style.position = selected.style.position || "absolute";
+      const dx = e.clientX - drag.startX;
+      const dy = e.clientY - drag.startY;
+      drag.group.forEach((m) => {
+        const nx = m.baseX + dx;
+        const ny = m.baseY + dy;
+        m.el.style.left = `${nx}px`;
+        m.el.style.top = `${ny}px`;
+        m.el.style.position = m.el.style.position || "absolute";
+      });
 
       // Auto-scroll stage when dragging near edges
       autoScrollStage(e.clientX, e.clientY);
@@ -673,9 +782,11 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     window.removeEventListener("pointermove", onPointerMove);
     window.removeEventListener("pointerup", onPointerUp);
     // Restore the transient drag-time `user-select` so it is never persisted.
-    if (drag && selected) {
-      if (drag.prevUserSelect) selected.style.userSelect = drag.prevUserSelect;
-      else selected.style.removeProperty("user-select");
+    if (drag) {
+      drag.group.forEach((m) => {
+        if (m.prevUserSelect) m.el.style.userSelect = m.prevUserSelect;
+        else m.el.style.removeProperty("user-select");
+      });
     }
     // A click without any pointer movement is a *selection*, not an edit — it
     // must not push history or emit a change (which would flag the slide dirty
@@ -770,11 +881,15 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
   }
 
   function remove() {
-    if (!selected) return;
-    selected.remove();
+    const els = getSelectionSet();
+    if (els.length === 0) return;
+    els.forEach((el) => el.remove());
     selected = null;
+    selectedSet = [];
     if (overlay) overlay.style.display = "none";
+    if (selectionLayer) selectionLayer.innerHTML = "";
     onSelection(null);
+    updateToolbar();
     pushHistory();
     emit();
   }
@@ -822,25 +937,88 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     emit();
   }
 
+  // Group the current selection (one or many top-level boxes) into a single
+  // `data-slide-group` wrapper. Each child keeps its on-slide pixel position:
+  // the wrapper is sized/placed to bound the boxes, and every child is
+  // re-positioned *relative to the wrapper* by the same offset, so nothing
+  // visually moves. If a single box is already a group it is left as-is.
   function group() {
-    if (!selected) return;
+    const boxes = getSelectionSet()
+      .map((el) => topBox(el))
+      .filter((el) => el && el.parentElement === slideRoot());
+    // De-dupe (two nested clicks could resolve to the same top box).
+    const unique = [...new Set(boxes)];
+    if (unique.length < 2) return;
+
+    // Compute the bounding box of every top-level box in slide coordinates.
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    unique.forEach((el) => {
+      const b = parseBox(el);
+      minX = Math.min(minX, b.x);
+      minY = Math.min(minY, b.y);
+      maxX = Math.max(maxX, b.x + b.w);
+      maxY = Math.max(maxY, b.y + b.h);
+    });
+
     const wrap = document.createElement("div");
     wrap.setAttribute("data-slide-group", "1");
-    selected.parentNode.insertBefore(wrap, selected);
-    wrap.appendChild(selected);
-    select(wrap);
+    wrap.style.position = "absolute";
+    wrap.style.left = `${Math.round(minX)}px`;
+    wrap.style.top = `${Math.round(minY)}px`;
+    wrap.style.width = `${Math.round(maxX - minX)}px`;
+    wrap.style.height = `${Math.round(maxY - minY)}px`;
+    wrap.style.cursor = "move";
+    wrap.style.zIndex = "1";
+    wrap.style.outline = "none";
+
+    // Insert the wrapper before the first box, then move every box inside,
+    // offsetting its coordinates to the wrapper origin.
+    const first = unique[0];
+    first.parentNode.insertBefore(wrap, first);
+    unique.forEach((el) => {
+      const b = parseBox(el);
+      el.style.left = `${Math.round(b.x - minX)}px`;
+      el.style.top = `${Math.round(b.y - minY)}px`;
+      wrap.appendChild(el);
+    });
+
+    setMultiSelected([wrap]);
     pushHistory();
     emit();
   }
 
+  // Ungroup the current selection. Every selected group is unwrapped in place:
+  // its children are re-parented to the slide root and their coordinates are
+  // restored to absolute slide space (group origin + local offset), so position
+  // and size are preserved exactly. When a box that is not a group is selected,
+  // nothing happens.
   function ungroup() {
-    if (!selected || !selected.getAttribute("data-slide-group")) return;
-    const parent = selected.parentNode;
-    while (selected.firstChild) parent.insertBefore(selected.firstChild, selected);
-    parent.removeChild(selected);
-    selected = null;
-    if (overlay) overlay.style.display = "none";
-    onSelection(null);
+    const groups = getSelectionSet().filter((el) => el.getAttribute && el.getAttribute("data-slide-group"));
+    if (groups.length === 0) return;
+    const root = slideRoot();
+    const released = [];
+    groups.forEach((g) => {
+      if (!g.isConnected) return;
+      const gx = num(g.style.left) || 0;
+      const gy = num(g.style.top) || 0;
+      const parent = g.parentNode;
+      while (g.firstChild) {
+        const child = g.firstChild;
+        g.removeChild(child);
+        if (child.nodeType === 1) {
+          const cx = num(child.style.left) || 0;
+          const cy = num(child.style.top) || 0;
+          child.style.left = `${Math.round(cx + gx)}px`;
+          child.style.top = `${Math.round(cy + gy)}px`;
+          child.style.position = child.style.position || "absolute";
+        }
+        parent.insertBefore(child, g);
+        if (child.nodeType === 1) released.push(child);
+      }
+      parent.removeChild(g);
+    });
+    if (released.length) setMultiSelected(released);
+    else clearSelection();
     pushHistory();
     emit();
   }
@@ -1278,8 +1456,15 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
   }
 
   function nudge(dx, dy) {
-    if (!selected) return;
-    applyBox({ x: parseBox(selected).x + dx, y: parseBox(selected).y + dy });
+    const els = getSelectionSet();
+    if (els.length === 0) return;
+    els.forEach((el) => {
+      const b = parseBox(el);
+      el.style.left = `${Math.round(b.x + dx)}px`;
+      el.style.top = `${Math.round(b.y + dy)}px`;
+      el.style.position = el.style.position || "absolute";
+    });
+    positionOverlay();
     pushHistory();
     emit();
   }
@@ -1298,17 +1483,53 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
 
   function restore() {
     slideRoot().innerHTML = rewriteMediaUrlsToPreview(history[histIndex]);
-    clearSelection();
+    selected = null;
+    selectedSet = [];
+    if (overlay) overlay.style.display = "none";
+    if (selectionLayer) selectionLayer.innerHTML = "";
+    onSelection(null);
+    updateToolbar();
     emit();
   }
 
   // ---- document-level listeners ----
+  // Resolve the inner box to select when descending into a group: the topmost
+  // positioned/editable element between the clicked target and the group
+  // wrapper (inclusive of the group itself). Clicking inside a group therefore
+  // selects the child box the user aimed at, never the whole slide.
+  function innerBox(el, limit) {
+    let n = el;
+    while (n && n !== limit) {
+      if (isPositioned(n) || isTextEditable(n)) return n;
+      n = n.parentElement;
+    }
+    return limit;
+  }
+
+  // Is `el` (or one of its ancestors) a member of the current multi-selection?
+  function isWithinSelectedGroup(el) {
+    return getSelectionSet().some((g) => g.getAttribute && g.getAttribute("data-slide-group") && g.contains(el));
+  }
+
   function onDocClick(e) {
     if (e.target === overlay) return;
     if (e.target.getAttribute && e.target.getAttribute("data-slide-handle")) return;
+    const additive = e.ctrlKey || e.metaKey;
+
+    // Ctrl/Cmd+click inside a currently-selected group descends into it: select
+    // the inner child box (additively) instead of re-selecting the whole group.
+    // The child keeps its own position/size; colour/font simply inherit from the
+    // parent via the normal CSS cascade (no mutation needed).
+    if (additive && isWithinSelectedGroup(e.target)) {
+      const group = getSelectionSet().find((g) => g.getAttribute && g.getAttribute("data-slide-group") && g.contains(e.target));
+      const target = innerBox(e.target, group);
+      select(target, { additive: true });
+      return;
+    }
+
     // Select the whole box, not a nested child, so the overlay frames the box
     // and text editing targets it (not a tiny inner leaf).
-    select(topEditable(e.target) || e.target);
+    select(topEditable(e.target) || e.target, { additive });
   }
 
   // Double-click a text element to dive straight into editing it — the floating
@@ -1344,7 +1565,19 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
 
   function handleContextMenu(e) {
     e.preventDefault();
-    select(e.target);
+    const target = e.target;
+    // Right-clicking must NOT blow away an existing multi-selection: if the
+    // clicked element is already part of the selection, keep the whole set and
+    // just promote it to primary so the context menu (group/duplicate/…) acts on
+    // the whole selection. Otherwise fall back to a single selection.
+    if (target && target !== root && target !== slideRoot() && getSelectionSet().includes(target)) {
+      selected = target;
+      updateOverlayColor();
+      positionOverlay();
+      selectionInfo();
+    } else {
+      select(target);
+    }
     if (onContextMenu) {
       onContextMenu(e.clientX, e.clientY, !!selected);
     }
@@ -1552,6 +1785,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     window.removeEventListener("pointermove", onPendingMove);
     window.removeEventListener("pointerup", onPendingUp);
     if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    if (selectionLayer && selectionLayer.parentNode) selectionLayer.parentNode.removeChild(selectionLayer);
     if (hoverLayer && hoverLayer.parentNode) hoverLayer.parentNode.removeChild(hoverLayer);
   }
 
@@ -1600,6 +1834,8 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     undo,
     redo,
     getSelected: () => selected,
+    getSelectionSet,
+    setMultiSelected,
     getIcon: findIcon,
     isEditing: () => editing,
     isTextEditing: () => textEditing,

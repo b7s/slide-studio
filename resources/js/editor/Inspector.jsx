@@ -1085,8 +1085,8 @@ export default function Inspector() {
 
             <Section id="actions" label={__("messages.inspector.section_actions")}>
               <div className="grid grid-cols-2 gap-1.5">
-                <Button variant="secondary" disabled={disabled} onClick={cmd.group}>{__("messages.inspector.group")}</Button>
-                <Button variant="secondary" disabled={disabled} onClick={cmd.ungroup}>{__("messages.inspector.ungroup")}</Button>
+                <Button variant="secondary" disabled={disabled || !s.multi} onClick={cmd.group}>{__("messages.inspector.group")}</Button>
+                <Button variant="secondary" disabled={disabled || !s.isGroup} onClick={cmd.ungroup}>{__("messages.inspector.ungroup")}</Button>
                 <Button variant="secondary" disabled={disabled} onClick={() => setStyle("position", "absolute")}>{__("messages.inspector.make_absolute")}</Button>
               </div>
             </Section>
