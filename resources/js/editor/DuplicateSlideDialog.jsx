@@ -6,15 +6,17 @@ import {Label} from "../Components/ui/label";
 import {__} from "../lib/i18n";
 
 // Reusable duplicate dialog. Receives the slide under the cursor and a
-// pre-filled filename (e.g. `"01-capa (cópia).html"`); on confirm calls
-// `onDuplicate(newFilename)` so the caller can hand it to the existing
-// `DuplicateSlide` transition (no backend changes needed).
-export default function DuplicateSlideDialog({ open, initialFile = "", onClose, onDuplicate }) {
-  const [value, setValue] = useState(initialFile);
+// pre-filled human-readable title (e.g. `"Capa (cópia)"`); on confirm calls
+// `onDuplicate(newTitle)` so the caller can hand it to the existing
+// DuplicateSlide transition. The HTML filename is derived server-side from
+// the title (slug + .html), so the user only ever sees/inputs the name —
+// no path or extension fiddling.
+export default function DuplicateSlideDialog({ open, initialTitle = "", onClose, onDuplicate }) {
+  const [value, setValue] = useState(initialTitle);
 
   useEffect(() => {
-    if (open) setValue(initialFile);
-  }, [open, initialFile]);
+    if (open) setValue(initialTitle);
+  }, [open, initialTitle]);
 
   const submit = () => {
     const trimmed = value.trim();

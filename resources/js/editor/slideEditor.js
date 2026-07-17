@@ -11,6 +11,12 @@
 
 const HANDLES = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 
+// Highlight accent used for the hover (dashed) and selection (solid) outlines.
+// Hardcoded because the slide engine runs inside a Shadow DOM, where the
+// `:root` CSS variables (e.g. --highlight) are not available. Mirrors
+// --highlight in resources/css/app.css.
+const HIGHLIGHT = "#2f6df6";
+
 // Icon catalog. The path data + tag references live in a single generated
 // file (`icons.config.js`) sourced from the installed `lucide-react` package
 // via `scripts/icons.mjs`. Do not hand-edit icon paths inside this file — to
@@ -327,7 +333,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
       h.style.position = "absolute";
       h.style.width = "10px";
       h.style.height = "10px";
-      h.style.border = "1.5px solid #fff";
+      h.style.border = `1.5px solid ${HIGHLIGHT}`;
       h.style.borderRadius = "2px";
       h.style.pointerEvents = "auto";
       h.style.cursor = cursorFor(pos);
@@ -337,17 +343,14 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     return ov;
   }
 
-  // Apply a contrasting outline + handle fill so the selection stays visible
-  // regardless of the element's background. The handle stroke is the inverse
-  // of the fill so each handle reads on both light and dark areas.
+  // Apply a highlight outline + matching handle fill so the selection reads
+  // consistently in the editor accent colour.
   function updateOverlayColor() {
     if (!overlay || !selected) return;
-    const c = contrastColor(selected);
-    const inv = c === "#ffffff" ? "#111111" : "#ffffff";
-    overlay.style.border = `1.5px solid ${c}`;
+    overlay.style.border = `2px solid ${HIGHLIGHT}`;
     overlay.querySelectorAll("[data-slide-handle]").forEach((handle) => {
-      handle.style.background = inv;
-      handle.style.borderColor = c;
+      handle.style.background = HIGHLIGHT;
+      handle.style.borderColor = "#ffffff";
     });
   }
 
@@ -1339,7 +1342,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     beginTextEdit();
   }
 
-  function onContextMenu(e) {
+  function handleContextMenu(e) {
     e.preventDefault();
     select(e.target);
     if (onContextMenu) {
@@ -1451,8 +1454,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
 
   function positionHover(target, el) {
     if (!target || target === selected) return;
-    const c = contrastColor(target);
-    el.style.border = `2px dotted ${c}`;
+    el.style.border = `2px dashed ${HIGHLIGHT}`;
     const r = target.getBoundingClientRect();
     const host = root.host ?? root;
     const sr = host.getBoundingClientRect();
@@ -1523,7 +1525,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
   root.addEventListener("click", onDocClick, true);
   root.addEventListener("dblclick", onDocDblClick, true);
   root.addEventListener("pointerdown", onPointerDown, true);
-  root.addEventListener("contextmenu", onContextMenu, true);
+  root.addEventListener("contextmenu", handleContextMenu, true);
   root.addEventListener("input", onDocInput, true);
   root.addEventListener("blur", onDocBlur, true);
   root.addEventListener("pointermove", onPointerMoveHover, true);
@@ -1537,7 +1539,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     root.removeEventListener("click", onDocClick, true);
     root.removeEventListener("dblclick", onDocDblClick, true);
     root.removeEventListener("pointerdown", onPointerDown, true);
-    root.removeEventListener("contextmenu", onContextMenu, true);
+    root.removeEventListener("contextmenu", handleContextMenu, true);
     root.removeEventListener("input", onDocInput, true);
     root.removeEventListener("blur", onDocBlur, true);
     root.removeEventListener("pointermove", onPointerMoveHover, true);

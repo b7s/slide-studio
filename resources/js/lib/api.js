@@ -160,13 +160,13 @@ export async function createSlide(presentationId, { title = null } = {}) {
     source_mode: data.source_mode,
   };
 }
-export async function duplicateSlide(file, { filename, title = null }, presentationId = null) {
+export async function duplicateSlide(file, { title }, presentationId = null) {
   const query = {};
   if (presentationId !== null) query.presentation_id = presentationId;
   const res = await fetch(route("slideDuplicate", { slide: file, query }), {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ filename, title }),
+    body: JSON.stringify({ title }),
   });
   if (!res.ok) throw new Error("duplicate_failed");
   return await res.json();

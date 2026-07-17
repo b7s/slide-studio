@@ -1,5 +1,6 @@
 import {forwardRef, useEffect, useImperativeHandle, useRef} from "react";
 import {rewriteMediaUrlsToPreview} from "../lib/mediaUrl";
+import {BASE_CSS} from "../lib/slideStyle";
 
 /**
  * SlideCanvas — renders slide HTML inside an open Shadow DOM root. CSS from
@@ -32,9 +33,7 @@ const SlideCanvas = forwardRef(function SlideCanvas(
   // (inline) colour/font — e.g. a <b> inside a red <div> would turn grey instead
   // of red. Scoping to `.slide` lets explicit styles win via the cascade while
   // inheritance flows colour/font down to every child that doesn't set its own.
-  const BASE_CSS = `.slide{color:#e8e8e8;font-family:system-ui,-apple-system,sans-serif}
-ul,ol{margin:0;padding-left:1.4em}
-li{margin:0}`;
+  // BASE_CSS is imported from ../lib/slideStyle (shared with the preview doc).
 
   useEffect(() => {
     const host = hostRef.current;

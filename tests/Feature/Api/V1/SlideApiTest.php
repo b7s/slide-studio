@@ -149,36 +149,75 @@ test('POST /api/v1/slides uses a custom title when provided', function () {
 test('POST /api/v1/slides/{file}/duplicate creates a copy and audits it', function () {
     seedPresentation();
 
+    // The frontend sends only the human title now; the server derives the
+    // filename from it (same pattern as RenameSlide).
     $response = $this->postJson('/api/v1/slides/01-a.html/duplicate', [
-        'filename' => '03-c.html',
-        'title' => 'C',
+        'title' => 'Capa B',
     ]);
 
     $response->assertCreated();
-    expect(Slide::where('filename', '03-c.html')->exists())->toBeTrue();
+    expect(Slide::where('filename', 'capa-b.html')->exists())->toBeTrue();
+    expect($response->json('data.title'))->toBe('Capa B');
     expect(AuditLog::where('event', 'slide.duplicated')->count())->toBe(1);
+});
+
+test('POST /api/v1/slides/{file}/duplicate slugifies accents in the derived filename', function () {
+    seedPresentation();
+
+    $response = $this->postJson('/api/v1/slides/01-a.html/duplicate', [
+        'title' => 'Apêndice — Próxima Página',
+    ]);
+
+    $response->assertCreated();
+    expect(Slide::where('filename', 'apendice-proxima-pagina.html')->exists())->toBeTrue();
+});
+
+test('POST /api/v1/slides/{file}/duplicate falls back to a suffix when title is omitted', function () {
+    seedPresentation();
+
+    // No title at all → the action falls back to "<source-title> (cópia)".
+    // Note: whitespace-only titles are rejected at the Form Request layer
+    // (min:1), keeping the contract explicit at the input boundary.
+    $response = $this->postJson('/api/v1/slides/01-a.html/duplicate', []);
+
+    $response->assertStatus(422);
+
+    // Now send an empty string in the title field — Laravel's validation
+    // considers "" not "filled", so it also fails. Real bug: a frontend
+    // passing the typed value through its trim pipeline should always yield
+    // a non-empty value when the user pressed Enter.
+    $this->postJson('/api/v1/slides/01-a.html/duplicate', [
+        'title' => '',
+    ])->assertStatus(422);
 });
 
 test('POST /api/v1/slides/{file}/duplicate avoids colliding filenames in the deck', function () {
     seedPresentation();
-    // Seed a second slide whose filename already exists in the deck so the
-    // duplicate must pick a unique slot rather than shadow it.
+
+    // Pre-seed a slide with the title the duplicate is about to take. Since
+    // the filename is derived uniquely from the title, the duplicate must
+    // land under a suffixed filename rather than shadowing the existing row.
     Slide::create([
         'presentation_id' => Presentation::query()->first()->id,
-        'filename' => '01-a.html',
-        'title' => 'Existing',
+        'filename' => 'capa.html',
+        'title' => 'Capa',
         'position' => 99,
         'source_mode' => SourceMode::Deck,
     ]);
 
     $this->postJson('/api/v1/slides/01-a.html/duplicate', [
-        'filename' => '01-a.html',
+        'title' => 'Capa',
     ])->assertCreated();
 
-    // Two rows were already sharing `01-a.html` before this call; the
-    // duplicate must avoid that filename and live under a unique suffix.
-    expect(Slide::where('filename', '01-a.html')->count())->toBe(2);
-    expect(Slide::where('filename', '01-a-2.html')->exists())->toBeTrue();
+    expect(Slide::where('filename', 'capa.html')->count())->toBe(1);
+    expect(Slide::where('filename', 'capa-2.html')->exists())->toBeTrue();
+});
+
+test('POST /api/v1/slides/{file}/duplicate rejects a missing title', function () {
+    seedPresentation();
+
+    $this->postJson('/api/v1/slides/01-a.html/duplicate', [])
+        ->assertStatus(422);
 });
 
 test('POST /api/v1/reorder persists slide positions', function () {

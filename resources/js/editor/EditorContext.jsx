@@ -12,6 +12,7 @@ import {route} from "../lib/routes";
 import * as api from "../lib/api";
 import { toast } from "sonner";
 import { __ } from "../lib/i18n";
+import { SLIDE_BG, SLIDE_COLOR, SLIDE_FONT } from "../lib/slideStyle";
 
 const EditorContext = createContext(null);
 
@@ -192,13 +193,13 @@ export function EditorProvider({
   );
 
   const duplicate = useCallback(
-    async (file, name) => {
-      if (!file || !name) return;
+    async (file, title) => {
+      if (!file || !title?.trim()) return;
       if (!permissions?.canEdit) return;
       setStatusKey("messages.editor.saving");
       setStatusTone("loading");
       try {
-        const copy = await api.duplicateSlide(file, { filename: name, title: null }, presentationIdRef.current);
+        const copy = await api.duplicateSlide(file, { title: title.trim() }, presentationIdRef.current);
         await loadSlides(root);
         await selectFile(copy.file);
         setStatusKey("messages.editor.duplicated");
@@ -476,11 +477,16 @@ export function EditorProvider({
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${file}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;min-height:100dvh;background:#0d1b2a;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif}
-.slide{width:1600px;height:900px;background:#0d1b2a;color:#e8e8e8;position:relative;overflow:hidden;max-width:100vw;max-height:100dvh;object-fit:contain}
+html,body{width:100%;min-height:100dvh;background:${SLIDE_BG};display:flex;align-items:center;justify-content:center;font-family:${SLIDE_FONT}}
+.slide{width:1600px;height:900px;background:${SLIDE_BG};color:${SLIDE_COLOR};position:relative;overflow:hidden;max-width:100vw;max-height:100dvh;object-fit:contain}
 .slide>*{position:absolute}
+.slide,.slide *{pointer-events:none!important}
+ul,ol{margin:0;padding-left:1.4em}li{margin:0}
 </style>
 </head>
 <body>${html}</body>
@@ -769,6 +775,8 @@ html,body{width:100%;min-height:100dvh;background:#0d1b2a;display:flex;align-ite
       renamePresentation,
       undo,
       redo,
+      slideFullscreen,
+      toggleSlideFullscreen,
     ]
   );
 

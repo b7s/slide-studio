@@ -1,5 +1,6 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { rewriteMediaUrlsToPreview } from "../lib/mediaUrl";
+import { BASE_CSS } from "../lib/slideStyle";
 
 // Faithful, isolated slide preview for the left-panel list. Each thumbnail
 // renders the slide HTML inside its own open Shadow DOM (so any <style>/<script>
@@ -10,10 +11,8 @@ import { rewriteMediaUrlsToPreview } from "../lib/mediaUrl";
 const FRAME_W = 1600;
 const FRAME_H = 900;
 
-const BASE_CSS = `.slide{color:#e8e8e8;font-family:system-ui,-apple-system,sans-serif;user-select:none;cursor:default}
-.slide *{cursor:default!important;pointer-events:none!important;user-select:none!important}
-ul,ol{margin:0;padding-left:1.4em}
-li{margin:0}`;
+const THUMB_CSS = `${BASE_CSS}
+.slide *{cursor:default!important;pointer-events:none!important;user-select:none!important}`;
 
 function SlideThumb({ html, className = "" }) {
   const hostRef = useRef(null);
@@ -40,14 +39,14 @@ function SlideThumb({ html, className = "" }) {
     }
     const scale = width > 0 ? width / FRAME_W : 0;
     shadowRef.current.innerHTML =
-      `<style data-slide-base="1">${BASE_CSS}</style>` +
+      `<style data-slide-base="1">${THUMB_CSS}</style>` +
       `<div class="slide" data-slide-root="1" style="position:absolute;top:0;left:0;width:${FRAME_W}px;height:${FRAME_H}px;overflow:hidden;transform:scale(${scale});transform-origin:top left">${rewriteMediaUrlsToPreview(html || "")}</div>`;
   }, [html, width]);
 
   return (
     <div
       ref={hostRef}
-      className={`relative aspect-video overflow-hidden bg-[var(--navy)] ${className || "w-full"}`}
+      className={`relative aspect-video overflow-hidden ${className || "w-full"}`}
     />
   );
 }

@@ -6,6 +6,7 @@ import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, Di
 import {Tooltip, TooltipContent, TooltipTrigger} from "../Components/ui/tooltip";
 import {ChevronDown, ChevronUp, Copy, CopyPlus, Edit3, Files, List, Plus, Trash2} from "lucide-react";
 import {useEditor} from "./EditorContext";
+import ContextMenu from "./ContextMenu";
 import SlideThumb from "./SlideThumb";
 import RenameSlideDialog from "./RenameSlideDialog";
 import DuplicateSlideDialog from "./DuplicateSlideDialog";
@@ -49,7 +50,7 @@ export default function LeftPanel({ slides, selectedFile, onSelect, count }) {
       list.splice(insertIndex, 0, moved);
       const order = {};
       list.forEach((s, i) => {
-        order[s.file] = i;
+        order[s.file] = i + 1;
       });
       reorder(order);
       onSelect(moved.file);
@@ -68,14 +69,17 @@ export default function LeftPanel({ slides, selectedFile, onSelect, count }) {
     createSlide();
   };
 
-  // Sensible default filename for the duplicate dialog: strip the `.html`
-  // extension, append the localized copy suffix (e.g. "(cópia)"), and put
-  // `.html` back. Kept inline so the dialog can pre-fill without sending
-  // the user back to the bottom of the panel.
-  const defaultDuplicateFilename = (file) => {
+  // The duplicate dialog asks for a human title — the server derives the
+  // filename from it (slug + .html) the same way RenameSlide does, so we
+  // append the localized copy suffix to the SLIDE TITLE and let the user
+  // confirm/correct it. Pre-filling with the source title (not the
+  // stored HTML filename) avoids the bug where `.html` stripping turned
+  // "01-capa.html" into the spurious "01-capa (cópia)".
+  const defaultDuplicateTitle = (slide) => {
     const suffix = __("messages.slide.copy_suffix") || "(copy)";
-    const base = file.replace(/\.html$/i, "");
-    return `${base} ${suffix}.html`;
+    const base = (slide?.title ?? "").trim();
+    if (base === "") return suffix.trim();
+    return `${base} ${suffix}`;
   };
 
   const move = (direction) => {
@@ -88,7 +92,7 @@ export default function LeftPanel({ slides, selectedFile, onSelect, count }) {
     next.splice(target, 0, moved);
     const order = {};
     next.forEach((s, i) => {
-      order[s.file] = i;
+      order[s.file] = i + 1;
     });
     reorder(order);
     selectFile(moved.file);
@@ -100,6 +104,18 @@ export default function LeftPanel({ slides, selectedFile, onSelect, count }) {
       move(e.key === "ArrowUp" ? "up" : "down");
     }
   };
+
+  // Keep the bottom-row duplicate input in sync with the currently selected
+  // slide so the user can press Enter (or click the duplicate button) and the
+  // hint is already the actual title — not an empty placeholder or, worse, a
+  // stale filename carried over from the previous selection.
+  useEffect(() => {
+    const current = slides.find((s) => s.file === selectedFile);
+    if (!current) return;
+    const suffix = __("messages.slide.copy_suffix") || "(copy)";
+    const base = (current.title ?? "").trim();
+    setDupName(base === "" ? suffix.trim() : `${base} ${suffix}`);
+  }, [selectedFile, slides]);
 
   // Close the right-click context menu on Escape.
   useEffect(() => {
@@ -206,6 +222,7 @@ export default function LeftPanel({ slides, selectedFile, onSelect, count }) {
             >
               {slides.map((slide, index) => {
                 const active = slide.file === selectedFile;
+                const number = index + 1;
                 const isTemplate = root === "templates";
                 const dropHere = dropTarget && dropTarget.index === index;
                 const isDragging = draggedIndex === index;
@@ -284,11 +301,11 @@ export default function LeftPanel({ slides, selectedFile, onSelect, count }) {
                            : "border-[var(--border)] hover:bg-[var(--secondary)]",
                        ].join(" ")}
                      >
-                        <span className={cn("relative aspect-video shrink-0 overflow-hidden rounded-md", compact ? "w-full" : "w-24")}>
+                        <span className={cn("relative aspect-video shrink-0 overflow-hidden rounded-md border border-gray-200", compact ? "w-full" : "w-24")}>
                           <SlideThumb html={slide.html} className={compact ? "w-full" : "w-24"} />
                          <span className="pointer-events-none absolute left-1 top-1 rounded bg-[var(--navy)]/80 px-1 text-[10px] font-bold text-white">
-                           {slide.number}
-                         </span>
+                            {number}
+                          </span>
                        </span>
                       {!compact && (
                       <span className="grid min-w-0 content-center gap-1">
@@ -451,70 +468,48 @@ export default function LeftPanel({ slides, selectedFile, onSelect, count }) {
 
       <DuplicateSlideDialog
         open={duplicateTarget !== null}
-        initialFile={duplicateTarget?.defaultFilename || duplicateTarget?.file || ""}
+        initialTitle={duplicateTarget?.defaultTitle || ""}
         onClose={() => setDuplicateTarget(null)}
-        onDuplicate={(name) => {
+        onDuplicate={(title) => {
           const target = duplicateTarget;
           setDuplicateTarget(null);
-          if (target) duplicate(target.file, name);
+          if (target) duplicate(target.file, title);
         }}
       />
 
       {ctx && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setCtx(null)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setCtx(null);
-            }}
-          />
-          <div
-            role="menu"
-            className="fixed z-50 min-w-[180px] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 shadow-xl"
-            style={{ left: ctxPos.x, top: ctxPos.y }}
-          >
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-[var(--secondary)]"
-              onClick={() => {
-                setRenameTarget({ file: ctx.file, title: ctx.title });
-                setCtx(null);
-              }}
-            >
-              <Edit3 className="size-4 text-[var(--muted-foreground)]" />
-              {__("messages.sidebar.rename")}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={readOnly}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-[var(--secondary)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
-              onClick={() => {
-                setDuplicateTarget({ file: ctx.file, defaultFilename: defaultDuplicateFilename(ctx.file) });
-                setCtx(null);
-              }}
-            >
-              <Copy className="size-4 text-[var(--muted-foreground)]" />
-              {__("messages.sidebar.duplicate")}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              disabled={readOnly}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-[var(--secondary)] text-[var(--destructive)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
-              onClick={() => {
-                setPendingDelete({ file: ctx.file, title: ctx.title });
-                setCtx(null);
-              }}
-            >
-              <Trash2 className="size-4" />
-              {__("messages.sidebar.remove")}
-            </button>
-          </div>
-        </>
+        <ContextMenu
+          position={ctxPos}
+          onClose={() => setCtx(null)}
+          items={[
+            {
+              label: __("messages.sidebar.rename"),
+              icon: <Edit3 className="size-4" />,
+              onClick: () => setRenameTarget({ file: ctx.file, title: ctx.title }),
+            },
+            {
+              label: __("messages.sidebar.duplicate"),
+              icon: <Copy className="size-4" />,
+              disabled: readOnly,
+              onClick: () => {
+                // Look up the actual slide so the dialog pre-fills with the
+                // human title, not the stored HTML filename. We can't rely on
+                // `slides.find(...)` here because the clicked slide IS the one
+                // we already opened the menu against, but we did not capture
+                // it past the render — use the ctx.file to read it back.
+                const source = slides.find((s) => s.file === ctx.file);
+                setDuplicateTarget({ file: ctx.file, defaultTitle: defaultDuplicateTitle(source) });
+              },
+            },
+            {
+              label: __("messages.sidebar.remove"),
+              icon: <Trash2 className="size-4" />,
+              danger: true,
+              disabled: readOnly,
+              onClick: () => setPendingDelete({ file: ctx.file, title: ctx.title }),
+            },
+          ]}
+        />
       )}
     </div>
   );

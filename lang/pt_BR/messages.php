@@ -250,7 +250,6 @@ return [
         'insert_icon' => 'Inserir ícone',
         'insert_table' => 'Inserir tabela',
         'insert_media' => 'Inserir mídia',
-        'pan_canvas' => 'Mover a tela (arraste para navegar)',
         'table_rows' => 'Linhas',
         'table_cols' => 'Colunas',
         'table_rows_dec' => 'Diminuir linhas',

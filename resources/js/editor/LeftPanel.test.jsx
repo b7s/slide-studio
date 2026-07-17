@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TooltipProvider } from "../Components/ui/tooltip";
+import { setTranslations } from "../lib/i18n";
+
+// Seed just the keys this test cares about — `__()` returns the key when
+// the translation map is empty, which would break the suffix-prefill test.
+setTranslations({
+  "messages.slide.copy_suffix": "(cópia)",
+  "messages.sidebar.duplicate_placeholder": "Duplicar slide atual como…",
+});
 
 vi.mock("@inertiajs/react", () => ({
   usePage: () => ({
@@ -13,26 +21,32 @@ vi.mock("@inertiajs/react", () => ({
 const deleteSlide = vi.fn();
 const undo = vi.fn(async () => false);
 const redo = vi.fn(async () => false);
+const duplicate = vi.fn();
 
 vi.mock("./EditorContext", () => ({
   useEditor: () => ({
     root: "deck",
     selectFile: vi.fn(),
-    duplicate: vi.fn(),
+    duplicate,
     reorder: vi.fn(),
     copyTemplate: vi.fn(),
     createSlide: vi.fn(),
     deleteSlide,
+    renameSlide: vi.fn(),
     undo,
     redo,
+    permissions: { canEdit: true, canShare: true, canDelete: true },
   }),
 }));
 
 import LeftPanel from "./LeftPanel";
 
 const slides = [
-  { file: "01-a.html", title: "A", number: "1", revision: null, source_mode: "deck", html: "<section/>" },
-  { file: "02-b.html", title: "B", number: "2", revision: null, source_mode: "deck", html: "<section/>" },
+  // Filenames deliberately use `01-capa.html`-style shapes to make sure the
+  // bug from the previous approach doesn't reappear: the duplicate dialog
+  // and bottom-row input must use the SLIDE TITLE (not the filename).
+  { file: "01-capa.html", title: "Capa", number: "1", revision: null, source_mode: "deck", html: "<section/>" },
+  { file: "02-agenda.html", title: "Agenda", number: "2", revision: null, source_mode: "deck", html: "<section/>" },
 ];
 
 describe("LeftPanel slide removal", () => {
@@ -43,7 +57,7 @@ describe("LeftPanel slide removal", () => {
   it("opens a confirmation dialog and deletes the slide when confirmed", async () => {
     render(
       <TooltipProvider>
-        <LeftPanel slides={slides} selectedFile="01-a.html" onSelect={vi.fn()} count={2} />
+        <LeftPanel slides={slides} selectedFile="01-capa.html" onSelect={vi.fn()} count={2} />
       </TooltipProvider>,
     );
 
@@ -56,13 +70,13 @@ describe("LeftPanel slide removal", () => {
 
     await userEvent.click(screen.getByText("messages.sidebar.remove_confirm"));
 
-    expect(deleteSlide).toHaveBeenCalledWith("01-a.html");
+    expect(deleteSlide).toHaveBeenCalledWith("01-capa.html");
   });
 
   it("does not delete the slide when the dialog is cancelled", async () => {
     render(
       <TooltipProvider>
-        <LeftPanel slides={slides} selectedFile="01-a.html" onSelect={vi.fn()} count={2} />
+        <LeftPanel slides={slides} selectedFile="01-capa.html" onSelect={vi.fn()} count={2} />
       </TooltipProvider>,
     );
 
@@ -71,5 +85,54 @@ describe("LeftPanel slide removal", () => {
     await userEvent.click(screen.getByText("messages.sidebar.remove_cancel"));
 
     expect(deleteSlide).not.toHaveBeenCalled();
+  });
+});
+
+describe("LeftPanel duplicate flow", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("pre-fills the bottom-row duplicate input with the slide title (not the filename)", () => {
+    render(
+      <TooltipProvider>
+        <LeftPanel slides={slides} selectedFile="01-capa.html" onSelect={vi.fn()} count={2} />
+      </TooltipProvider>,
+    );
+
+    const input = screen.getByPlaceholderText("Duplicar slide atual como…");
+    // Prefilled with the title + copy suffix — NOT the filename stripped of .html.
+    expect(input.value).toBe("Capa (cópia)");
+    expect(input.value).not.toContain("01-capa");
+    expect(input.value).not.toContain(".html");
+  });
+
+  it("passes the typed title to duplicate when the bottom-row Input is submitted", async () => {
+    render(
+      <TooltipProvider>
+        <LeftPanel slides={slides} selectedFile="01-capa.html" onSelect={vi.fn()} count={2} />
+      </TooltipProvider>,
+    );
+
+    const input = screen.getByPlaceholderText("Duplicar slide atual como…");
+    fireEvent.change(input, { target: { value: "Capa (custom)" } });
+    await userEvent.click(screen.getByLabelText("messages.sidebar.duplicate"));
+
+    expect(duplicate).toHaveBeenCalledTimes(1);
+    expect(duplicate).toHaveBeenCalledWith("01-capa.html", "Capa (custom)");
+  });
+
+  it("does not duplicate when the bottom-row Input is empty", async () => {
+    render(
+      <TooltipProvider>
+        <LeftPanel slides={slides} selectedFile="01-capa.html" onSelect={vi.fn()} count={2} />
+      </TooltipProvider>,
+    );
+
+    const input = screen.getByPlaceholderText("Duplicar slide atual como…");
+    fireEvent.change(input, { target: { value: "   " } });
+    await userEvent.click(screen.getByLabelText("messages.sidebar.duplicate"));
+
+    expect(duplicate).not.toHaveBeenCalled();
   });
 });

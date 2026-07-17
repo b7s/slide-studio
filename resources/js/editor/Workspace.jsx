@@ -6,6 +6,7 @@ import {Popover, PopoverContent, PopoverTrigger} from "../Components/ui/popover"
 import {useEditor} from "./EditorContext";
 import {__} from "../lib/i18n";
 import {cn} from "../Components/lib/utils";
+import {route} from "../lib/routes";
 import {touchAsset} from "../lib/api";
 import {ICON_CATALOG} from "./icons.config";
 import {MediaPickerDialog} from "./MediaPickerDialog";
@@ -22,7 +23,6 @@ import {
     CornerUpRight,
     FilesIcon,
     Group as GroupIcon,
-    GripVertical,
     ImagePlus,
     Loader2,
     Maximize,
@@ -121,50 +121,41 @@ export default function Workspace() {
   // Floating text toolbar: visible while a box is in text-edit mode. `rect` is
   // the selected box's viewport rect (emitted by the engine on enter/move).
   const [textToolbar, setTextToolbar] = useState({ active: false, rect: null });
-  const [pan, setPan] = useState({ active: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 });
 
-  const readOnly = !(permissions?.canEdit ?? false);
+  // Real browser fullscreen overlay that shows a live preview iframe of the
+  // current slide. `previewUrl` points at the dedicated preview endpoint.
+  const fsRef = useRef(null);
+  const previewUrl =
+    selectedFile
+      ? route("slidesHtml", { query: { file: selectedFile, presentation_id: presentationId, embed: "1" } })
+      : null;
 
-  const onPanStart = useCallback((e) => {
-    const stage = stageRef.current;
-    if (!stage) return;
-    e.preventDefault();
-    setPan({ active: true, startX: e.clientX, startY: e.clientY, scrollLeft: stage.scrollLeft, scrollTop: stage.scrollTop });
-    stage.style.cursor = "grabbing";
-    document.body.style.cursor = "grabbing";
-    document.body.style.userSelect = "none";
-  }, []);
-
-  const onPanMove = useCallback((e) => {
-    if (!pan.active) return;
-    const stage = stageRef.current;
-    if (!stage) return;
-    const dx = e.clientX - pan.startX;
-    const dy = e.clientY - pan.startY;
-    stage.scrollLeft = pan.scrollLeft - dx;
-    stage.scrollTop = pan.scrollTop - dy;
-  }, [pan.active, pan.startX, pan.startY, pan.scrollLeft, pan.scrollTop]);
-
-  const onPanEnd = useCallback(() => {
-    const stage = stageRef.current;
-    if (stage) {
-      stage.style.cursor = "";
+  // Enter/exit the browser Fullscreen API to match `slideFullscreen`. Esc is
+  // handled natively by the Fullscreen API; we also listen for the change so
+  // leaving fullscreen via the browser (e.g. F11/Esc) keeps state in sync.
+  useEffect(() => {
+    const el = fsRef.current;
+    if (!el) return undefined;
+    if (slideFullscreen) {
+      const req = el.requestFullscreen?.() ?? Promise.resolve();
+      req.catch(() => {});
+    } else if (document.fullscreenElement) {
+      document.exitFullscreen?.();
     }
-    document.body.style.cursor = "";
-    document.body.style.userSelect = "";
-    setPan({ active: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 });
-  }, []);
+    return undefined;
+  }, [slideFullscreen]);
 
   useEffect(() => {
-    if (pan.active) {
-      window.addEventListener("pointermove", onPanMove);
-      window.addEventListener("pointerup", onPanEnd);
-      return () => {
-        window.removeEventListener("pointermove", onPanMove);
-        window.removeEventListener("pointerup", onPanEnd);
-      };
-    }
-  }, [pan.active, onPanMove, onPanEnd]);
+    const onFsChange = () => {
+      if (!document.fullscreenElement && slideFullscreenRef.current) {
+        toggleSlideFullscreenRef.current();
+      }
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  const readOnly = !(permissions?.canEdit ?? false);
 
   useEffect(() => {
     const el = stageRef.current;
@@ -354,22 +345,8 @@ export default function Workspace() {
 
   return (
     <section className="panel relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-      {slideFullscreen && (
-        <button onClick={toggleSlideFullscreen} className="absolute right-4 top-4 z-20 flex size-8 items-center justify-center rounded-md bg-[var(--navy)]/80 text-white hover:bg-[var(--navy)]">
-          <Minimize2 className="size-4" />
-        </button>
-      )}
       {!slideFullscreen && (
       <div className="absolute inset-x-0 top-4 z-10 flex items-center justify-between px-4">
-        {/* Pan grip handle */}
-        <div
-          className="flex items-center px-2 cursor-grab active:cursor-grabbing select-none"
-          onPointerDown={onPanStart}
-          aria-label={__("messages.workspace.pan_canvas")}
-          title={__("messages.workspace.pan_canvas")}
-        >
-          <GripVertical className="size-4 text-[var(--muted-foreground)]/50 hover:text-[var(--muted-foreground)]" />
-        </div>
         <div className="toolbar-group">
           <IconTip label={__("messages.workspace.undo")}>
             <Button variant="ghost" size="icon-sm" aria-label={__("messages.workspace.undo")} onClick={runUndo} className="tool-icon">
@@ -547,12 +524,12 @@ export default function Workspace() {
       <div
         ref={stageRef}
         data-stage
-        className={cn("relative grid flex-1 place-items-center overflow-auto", slideFullscreen ? "bg-[var(--navy)] p-0" : "bg-[radial-gradient(circle,rgba(23,35,45,0.1)_1px,transparent_1.25px)] p-6 pt-24")}
-        style={slideFullscreen ? {} : { backgroundSize: "22px 22px" }}
+        className="relative grid flex-1 place-items-center overflow-auto bg-[radial-gradient(circle,rgba(23,35,45,0.1)_1px,transparent_1.25px)] p-6 pt-24"
+        style={{ backgroundSize: "22px 22px" }}
       >
         <div
           ref={slideRef}
-          className={cn("relative bg-[var(--navy)]", slideFullscreen ? "rounded-none" : "rounded-xl")}
+          className="relative rounded-2xl"
           style={{ width: `${FRAME_W}px`, height: `${FRAME_H}px`, transform: `scale(${zoom / 100})`, transformOrigin: "center" }}
         >
           <SlideCanvas
@@ -561,7 +538,7 @@ export default function Workspace() {
             html={html}
             frameWidth={FRAME_W}
             frameHeight={FRAME_H}
-            className="rounded-xl overflow-hidden border-1 border-gray-300 shadow-2xl"
+            className="rounded-2xl overflow-hidden border-1 border-gray-100 shadow-2xl"
           />
         </div>
 
@@ -612,6 +589,34 @@ export default function Workspace() {
           </Button>
         </div>
       </div>
+      )}
+
+      {slideFullscreen && (
+        <div
+          ref={fsRef}
+          className="fixed inset-0 z-50 flex flex-col bg-white"
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-gray-200 bg-[var(--navy)] px-4 py-3">
+            <span className="truncate text-sm font-medium text-white/90">{selectedFile}</span>
+            <button
+              type="button"
+              onClick={toggleSlideFullscreen}
+              aria-label={__("messages.workspace.exit_fullscreen")}
+              className="flex size-9 items-center justify-center rounded-md bg-white/10 text-white hover:bg-white/20"
+            >
+              <Minimize2 className="size-5" />
+            </button>
+          </div>
+          <div className="relative flex-1 bg-white">
+            {previewUrl && (
+              <iframe
+                title={__("messages.workspace.preview")}
+                src={previewUrl}
+                className="absolute inset-0 h-full w-full border-0 bg-white"
+              />
+            )}
+          </div>
+        </div>
       )}
 
       <ContextMenu
