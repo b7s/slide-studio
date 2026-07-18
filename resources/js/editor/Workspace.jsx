@@ -5,7 +5,6 @@ import {Tooltip, TooltipContent, TooltipTrigger} from "../Components/ui/tooltip"
 import {Popover, PopoverContent, PopoverTrigger} from "../Components/ui/popover";
 import {useEditor} from "./EditorContext";
 import {__} from "../lib/i18n";
-import {cn} from "../Components/lib/utils";
 import {route} from "../lib/routes";
 import {touchAsset} from "../lib/api";
 import {ICON_CATALOG} from "./icons.config";
@@ -428,7 +427,7 @@ export default function Workspace() {
                       title={name}
                       aria-label={name}
                       onClick={() => handleIconPick(name)}
-                      className="grid aspect-square place-items-center rounded-md border border-[var(--border)] bg-[var(--secondary)] text-[var(--foreground)] hover:bg-[var(--navy)]/5"
+                      className="grid aspect-square place-items-center rounded-md border border-[var(--border)] text-[var(--foreground)] hover:bg-[var(--navy)]/5"
                     >
                       <svg
                         viewBox="0 0 24 24"

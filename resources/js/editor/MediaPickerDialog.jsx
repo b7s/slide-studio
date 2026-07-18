@@ -172,7 +172,7 @@ export function MediaPickerDialog({ open, onClose, onPick, presentationId = null
             </Label>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-auto rounded-md border border-[var(--border)] bg-[var(--secondary)] p-2">
+          <div className="min-h-0 flex-1 overflow-auto rounded-md border border-[var(--border)] p-2">
             {loading ? (
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-6">
                 {Array.from({ length: 12 }).map((_, i) => (

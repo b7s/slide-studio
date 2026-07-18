@@ -1,46 +1,41 @@
-import { useEffect, useRef, useState } from "react";
-import { toHex, withAlpha, splitColorAlpha } from "../lib/color";
-import { applyListToElement } from "./listFormat";
-import { Button } from "../Components/ui/button";
-import { Input } from "../Components/ui/input";
-import { Label } from "../Components/ui/label";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../Components/ui/tabs";
-import { Popover, PopoverTrigger, PopoverContent } from "../Components/ui/popover";
+import {useEffect, useRef, useState} from "react";
+import {splitColorAlpha, toHex, withAlpha} from "../lib/color";
+import {applyListToElement} from "./listFormat";
+import {Button} from "../Components/ui/button";
+import {Input} from "../Components/ui/input";
+import {Label} from "../Components/ui/label";
+import {Tabs, TabsContent, TabsList, TabsTrigger} from "../Components/ui/tabs";
+import {Popover, PopoverContent, PopoverTrigger} from "../Components/ui/popover";
+import {Accordion, AccordionContent, AccordionItem, AccordionTrigger,} from "../Components/ui/accordion";
 import {
-  Accordion,
-  AccordionItem,
-  AccordionTrigger,
-  AccordionContent,
-} from "../Components/ui/accordion";
-import {
-  Bold,
-  Italic,
-  List,
-  ListOrdered,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  AlignStartVertical,
-  AlignCenterVertical,
-  AlignEndVertical,
-  ChevronUp,
-  ChevronDown,
-  ChevronsUp,
-  ChevronsDown,
-  ArrowUp,
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUpLeft,
-  ArrowUpRight,
-  ArrowDownLeft,
-  ArrowDownRight,
+    AlignCenter,
+    AlignCenterVertical,
+    AlignEndVertical,
+    AlignLeft,
+    AlignRight,
+    AlignStartVertical,
+    ArrowDown,
+    ArrowDownLeft,
+    ArrowDownRight,
+    ArrowLeft,
+    ArrowRight,
+    ArrowUp,
+    ArrowUpLeft,
+    ArrowUpRight,
+    Bold,
+    ChevronDown,
+    ChevronsDown,
+    ChevronsUp,
+    ChevronUp,
+    Italic,
+    List,
+    ListOrdered,
 } from "lucide-react";
-import { useEditor } from "./EditorContext";
-import { __ } from "../lib/i18n";
-import { cn } from "../Components/lib/utils";
-import { MediaPickerDialog } from "./MediaPickerDialog";
-import { touchAsset } from "../lib/api";
+import {useEditor} from "./EditorContext";
+import {__} from "../lib/i18n";
+import {cn} from "../Components/lib/utils";
+import {MediaPickerDialog} from "./MediaPickerDialog";
+import {touchAsset} from "../lib/api";
 
 const FONTS = ["Inter", "Georgia", "Roboto", "Arial", "Times New Roman", "Courier New"];
 
@@ -412,7 +407,7 @@ export function FillerSection({ st, cmd, presentationId }) {
         <select
           value={mode}
           onChange={(e) => handleModeChange(e.target.value)}
-          className="input-base h-9 w-full bg-[var(--secondary)] px-2"
+          className="input-base h-9 w-full px-2"
         >
           <option value="solid">{__("messages.inspector.filler_type_solid")}</option>
           <option value="gradient">{__("messages.inspector.filler_type_gradient")}</option>
@@ -457,7 +452,7 @@ export function FillerSection({ st, cmd, presentationId }) {
             <select
               value={grad.type}
               onChange={(e) => applyGradient(e.target.value, grad.angle, grad.c1, grad.c2, grad.alpha)}
-              className="input-base h-9 w-full bg-[var(--secondary)] px-2"
+              className="input-base h-9 w-full px-2"
             >
               <option value="linear">{__("messages.inspector.filler_linear")}</option>
               <option value="radial">{__("messages.inspector.filler_radial")}</option>
@@ -565,7 +560,7 @@ function ColorField({ label, value, onChange }) {
   return (
     <Label>
       <span>{label}</span>
-      <span className="flex h-8 items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--secondary)] p-1 pl-1.5">
+      <span className="flex h-8 items-center gap-1.5 rounded-md border border-[var(--border)] p-1 pl-1.5">
         <input
           type="color"
           value={hex}
@@ -700,7 +695,7 @@ function ShadowField({ value, onChange }) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="flex h-9 w-full items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 hover:bg-[var(--navy)]/5 focus-ring"
+          className="flex h-9 w-full items-center gap-2 rounded-md border border-[var(--border)] px-2 hover:bg-[var(--navy)]/5 focus-ring"
         >
           <span
             className="h-5 w-5 shrink-0 rounded-sm border border-[var(--border)] bg-[var(--card)]"
@@ -1065,9 +1060,9 @@ export default function Inspector() {
                 onInput={() => { editorDirty.current = true; syncToSlide(); }}
                 onBlur={() => syncToSlide()}
                 data-placeholder={__("messages.inspector.text_placeholder")}
-                className="rt-editor min-h-[84px] w-full resize-y overflow-auto rounded-md border border-[var(--border)] bg-[var(--secondary)] p-2 text-sm leading-relaxed text-[var(--foreground)] outline-none focus-ring [&_ul]:list-disc [&_ul]:m-0 [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:m-0 [&_ol]:pl-5 [&_li]:my-0.5"
+                className="rt-editor min-h-[84px] w-full resize-y overflow-auto rounded-md border leading-relaxed text-[var(--foreground)] outline-none focus-ring [&_ul]:list-disc [&_ul]:m-0 [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:m-0 [&_ol]:pl-5 [&_li]:my-0.5"
               />
-              <div className="mt-1.5 flex overflow-hidden rounded-md border border-[var(--border)] bg-[var(--secondary)]">
+              <div className="mt-1.5 flex overflow-hidden rounded-md border border-[var(--border)]">
                 <button onMouseDown={(e) => e.preventDefault()} onClick={() => format("bold")} className="flex h-8 flex-1 items-center justify-center border-r border-[var(--border)] font-bold hover:bg-[var(--navy)]/5" aria-label={__("messages.inspector.bold")}>
                   <Bold className="size-4" />
                 </button>
@@ -1160,7 +1155,7 @@ export default function Inspector() {
                 <select
                   value={st.fontFamily?.replace(/["']/g, "") || ""}
                   onChange={(e) => setStyle("fontFamily", e.target.value)}
-                  className="input-base focus-ring h-9 w-full bg-[var(--secondary)] px-2"
+                  className="input-base focus-ring h-9 w-full px-2"
                 >
                   <option value="" />
                   {FONTS.map((f) => (
@@ -1190,7 +1185,7 @@ export default function Inspector() {
                   <select
                     value={st.borderStyle || ""}
                     onChange={(e) => setStyle("borderStyle", e.target.value)}
-                    className="input-base h-9 w-full bg-[var(--secondary)] px-2"
+                    className="input-base h-9 w-full px-2"
                   >
                     <option value="">{__("messages.inspector.style_auto")}</option>
                     <option value="none">{__("messages.inspector.style_none")}</option>
@@ -1218,7 +1213,7 @@ export default function Inspector() {
             variant="outline"
             disabled={disabled}
             onClick={cmd.clearFormatting}
-            className="mt-3 w-full border-[var(--red)] text-[var(--red)] hover:bg-[var(--red)]/10"
+            className="mt-3 w-full"
           >
             {__("messages.inspector.clear_formatting")}
           </Button>

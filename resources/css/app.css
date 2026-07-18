@@ -4,61 +4,42 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.75rem;
+    --radius: 0.75rem;
 
-  --ink: #17232d;
-  --ink-soft: #53616d;
-  --ink-muted: #79838c;
-  --frame: #e9e9e8;
-  --paper: #ffffff;
-  --paper-2: #f1f2f2;
-  --navy: #001f35;
-  --navy-2: #062c46;
-  --highlight: oklch(62.3% 0.214 259.815);
-  --highlight-strong: oklch(58.8% 0.158 241.966);
-  --focus: var(--highlight-strong);
+    --ink: #17232d;
+    --ink-soft: #53616d;
+    --ink-muted: #79838c;
+    --frame: #e9e9e8;
+    --paper: #ffffff;
+    --paper-2: #f1f2f2;
+    --navy: #001f35;
+    --navy-2: #062c46;
+    --highlight: oklch(62.3% 0.214 259.815);
+    --highlight-strong: oklch(58.8% 0.158 241.966);
+    --focus: var(--highlight-strong);
 
-  --background: var(--paper);
-  --foreground: var(--ink);
-  --card: var(--paper);
-  --card-foreground: var(--ink);
-  --popover: var(--paper);
-  --popover-foreground: var(--ink);
-  --primary: var(--navy);
-  --primary-foreground: #f8fafc;
-  --input: rgba(255, 255, 255, 0.74);
-  --secondary: var(--input);
-  --secondary-foreground: var(--ink);
-  --muted: var(--paper-2);
-  --muted-foreground: var(--ink-muted);
-  --accent: color-mix(in srgb, var(--highlight) 14%, transparent);
-  --accent-foreground: var(--highlight-strong);
-  --destructive: oklch(58.6% 0.253 17.585);
-  --destructive-foreground: #fff;
-  --border: rgba(23, 35, 45, 0.12);
-  --ring: color-mix(in srgb, var(--highlight) 35%, transparent);
-  --sidebar: rgba(255, 255, 255, 0.76);
-  --panel: rgba(255, 255, 255, 0.76);
-}
-
-.dark {
-  --background: #0b1a28;
-  --foreground: #eef2f6;
-  --card: #0f2233;
-  --card-foreground: #eef2f6;
-  --popover: #0f2233;
-  --popover-foreground: #eef2f6;
-  --primary: #1a3a57;
-  --primary-foreground: #fff;
-  --input: rgba(11, 26, 40, 0.6);
-  --secondary: var(--input);
-  --secondary-foreground: #eef2f6;
-  --muted: #14283a;
-  --muted-foreground: #93a2b0;
-  --border: rgba(255, 255, 255, 0.12);
-  --ring: color-mix(in srgb, var(--highlight) 45%, transparent);
-  --sidebar: rgba(15, 34, 51, 0.86);
-  --panel: rgba(15, 34, 51, 0.86);
+    --background: var(--paper);
+    --foreground: var(--ink);
+    --card: var(--paper);
+    --card-foreground: var(--ink);
+    --popover: var(--paper);
+    --popover-foreground: var(--ink);
+    --primary: var(--navy);
+    --primary-foreground: #f8fafc;
+    --input: rgba(255, 255, 255, 0.74);
+    --secondary: color-mix(in oklab, var(--navy) 5%, transparent);
+    --secondary-foreground: var(--ink);
+    --muted: var(--paper-2);
+    --muted-foreground: var(--ink-muted);
+    --accent: color-mix(in srgb, var(--highlight) 14%, transparent);
+    --accent-foreground: var(--highlight-strong);
+    --destructive: oklch(58.6% 0.253 17.585);
+    --destructive-foreground: #fff;
+    --border: rgba(23, 35, 45, 0.12);
+    --ring: color-mix(in srgb, var(--highlight) 35%, transparent);
+    --sidebar: rgba(255, 255, 255, 0.76);
+    --panel: rgba(255, 255, 255, 0.76);
+    --red: oklch(58.6% 0.253 17.585);
 }
 
 @theme inline {
@@ -214,7 +195,7 @@
 
   /* ───── Nudge pad / grid control pad ───── */
   .nudge-pad {
-    @apply grid grid-cols-2 gap-1.5 rounded-md border border-[var(--border)] bg-[var(--secondary)] p-1;
+    @apply grid grid-cols-2 gap-1.5 rounded-md border border-[var(--border)] bg-[var(--input)] p-1;
   }
 
   /* ───── Slide list item ───── */
@@ -234,7 +215,7 @@
 
   /* ───── Input-style element ───── */
   .input-base {
-    @apply rounded-md border border-[var(--border)] text-sm transition-colors;
+    @apply rounded-md border border-[var(--border)] bg-[var(--input)] text-sm transition-colors;
   }
 
   /* ───── Focus ring (for textareas/inputs/selects) ───── */
@@ -264,6 +245,7 @@
   .rt-editor {
     white-space: pre-wrap;
     word-break: break-word;
+    @apply border-[var(--border)] p-2 text-sm;
   }
   .rt-editor:empty::before {
     content: attr(data-placeholder);

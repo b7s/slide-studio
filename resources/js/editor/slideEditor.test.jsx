@@ -630,6 +630,33 @@ describe("slideEditor item naming", () => {
     engine.destroy();
   });
 
+  it("selects the correct same-type item by its unique path", () => {
+    const { root } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.insertText();
+    const first = engine.getSelected();
+    engine.insertText();
+    const second = engine.getSelected();
+
+    const tree = engine.getLayerTree();
+    const boxes = tree.filter((n) => n.tag === "div" && n.name);
+    // Two text boxes must expose distinct paths, otherwise a bare `tag` chain
+    // would make every panel click resolve to the first sibling.
+    expect(boxes.length).toBe(2);
+    expect(boxes[0].path).not.toBe(boxes[1].path);
+
+    // Clicking the second row in the Layers panel selects the second box.
+    engine.selectByPath(boxes[1].path);
+    expect(engine.getSelected()).toBe(second);
+    // And the first row still resolves to the first box.
+    engine.selectByPath(boxes[0].path);
+    expect(engine.getSelected()).toBe(first);
+
+    engine.destroy();
+  });
+
+
   it("persists the name through the serialized snapshot", () => {
     const { root } = makeRoot();
     const onChange = vi.fn();

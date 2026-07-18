@@ -627,13 +627,24 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     updateToolbar();
   }
 
-  // Build the `tag > tag > …` selector for an element, identical to the one
-  // reported in `selectionInfo()` so it round-trips through `selectByPath`.
+  // Build a unique slide-relative CSS selector for an element. Each ancestor
+  // segment is `tag:nth-of-type(k)` so two siblings of the same tag resolve to
+  // DIFFERENT selectors — a bare `tag` chain would make `elementByPath` always
+  // match the first sibling, breaking panel clicks on same-type items. The
+  // path round-trips through `selectByPath` / `selectionInfo` unchanged.
   function pathOf(el) {
     const segs = [];
     let n = el;
     while (n && n !== slideRoot()) {
-      segs.push(n.tagName.toLowerCase());
+      const tag = n.tagName.toLowerCase();
+      // 1-based index among preceding siblings of the same tag.
+      let idx = 1;
+      let sib = n.previousElementSibling;
+      while (sib) {
+        if (sib.tagName === n.tagName) idx += 1;
+        sib = sib.previousElementSibling;
+      }
+      segs.push(`${tag}:nth-of-type(${idx})`);
       n = n.parentElement;
     }
     return segs.reverse().join(" > ");
