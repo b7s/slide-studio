@@ -30,6 +30,7 @@ final class UploadAsset
                 'user_id' => (int) auth()->id(),
                 'path' => $path,
                 'mime' => $file->getClientMimeType(),
+                'original_name' => $data->originalName,
             ]);
 
             if ($data->presentationId !== null) {

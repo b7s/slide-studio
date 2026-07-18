@@ -62,6 +62,28 @@ it('uploads an image and stores it on disk with a relative path', function () {
     expect($asset->presentations()->where('presentation_id', $presentation->id)->exists())->toBeTrue();
 });
 
+it('stores the original file name and exposes it via the resource', function () {
+    Storage::fake('public');
+    $user = makeUserFor();
+    $presentation = makeDeckFor($user);
+    $this->actingAs($user);
+
+    $file = UploadedFile::fake()->image('Company Logo.png', 10, 10);
+
+    $response = $this->postJson(route('api.v1.assets.store'), [
+        'file' => $file,
+        'presentation_id' => $presentation->id,
+    ]);
+
+    $response->assertCreated();
+    // The original filename is returned so the editor can name image boxes
+    // from a human-readable label instead of the stored uuid path.
+    expect($response->json('data.original_name'))->toBe('Company Logo.png');
+
+    $asset = Asset::query()->where('path', $response->json('data.path'))->firstOrFail();
+    expect($asset->original_name)->toBe('Company Logo.png');
+});
+
 it('rejects non image uploads', function () {
     Storage::fake('public');
     $user = makeUserFor();

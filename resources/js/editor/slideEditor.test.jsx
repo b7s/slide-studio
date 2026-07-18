@@ -488,3 +488,158 @@ describe("slideEditor multi-select + group/ungroup", () => {
     engine.destroy();
   });
 });
+
+describe("slideEditor item naming", () => {
+  it("assigns a placeholder name to a freshly inserted text box", () => {
+    const { root } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.insertText();
+    const box = engine.getSelected();
+    expect(box.getAttribute("data-slide-name")).toBe("texto");
+    // Flagged as a placeholder so it can upgrade once the user types.
+    expect(box.hasAttribute("data-slide-name-default")).toBe(true);
+
+    engine.destroy();
+  });
+
+  it("upgrades a placeholder text name to a summary once content is added", () => {
+    const { root } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.insertText();
+    const box = engine.getSelected();
+    box.textContent = "My Great Heading";
+    // The upgrade runs on the same `input` event the browser fires as the user
+    // types into the contenteditable box.
+    box.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+
+    expect(box.getAttribute("data-slide-name")).toBe("my-great-heading");
+    expect(box.hasAttribute("data-slide-name-default")).toBe(false);
+
+    engine.destroy();
+  });
+
+  it("names an icon from its catalog name", () => {
+    const { root } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.insertIcon("arrow-down");
+    const box = engine.getSelected();
+    expect(box.getAttribute("data-slide-name")).toBe("icon-arrow-down");
+
+    engine.destroy();
+  });
+
+  it("names an image from its original filename (slugified)", () => {
+    const { root } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.insertImageBox({ id: 7, url: "media/logo.svg", originalName: "Company Logo.png" });
+    const box = engine.getSelected();
+    expect(box.getAttribute("data-slide-name")).toBe("company-logo");
+
+    engine.destroy();
+  });
+
+  it("falls back to a path-derived name when no original filename is given", () => {
+    const { root } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.insertImageBox({ id: 7, url: "media/logo.svg", path: "media/logo.svg" });
+    const box = engine.getSelected();
+    expect(box.getAttribute("data-slide-name")).toBe("logo");
+
+    engine.destroy();
+  });
+
+  it("names a table and a group from their type", () => {
+    const { root } = makeRoot();
+    const slide = root.querySelector(".slide");
+    document.body.appendChild(root);
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.insertTable(2, 2);
+    expect(engine.getSelected().getAttribute("data-slide-name")).toBe("tabela");
+
+    const a = document.createElement("div");
+    a.style.position = "absolute";
+    a.style.left = "100px";
+    a.style.top = "100px";
+    const b = document.createElement("div");
+    b.style.position = "absolute";
+    b.style.left = "300px";
+    b.style.top = "100px";
+    slide.append(a, b);
+    engine.select(a);
+    engine.select(b, { additive: true });
+    engine.group();
+    expect(engine.getSelected().getAttribute("data-slide-name")).toBe("grupo");
+
+    engine.destroy();
+    root.remove();
+  });
+
+  it("makes duplicated names unique", () => {
+    const { root } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.insertText();
+    const first = engine.getSelected();
+    expect(first.getAttribute("data-slide-name")).toBe("texto");
+
+    engine.duplicate();
+    const clone = engine.getSelected();
+    expect(clone.getAttribute("data-slide-name")).toBe("texto-2");
+    // The clone is a distinct element from the original.
+    expect(clone).not.toBe(first);
+    // Both names co-exist on the slide without colliding.
+    const names = [...root.querySelectorAll("[data-slide-name]")].map((n) => n.getAttribute("data-slide-name"));
+    expect(names).toContain("texto");
+    expect(names).toContain("texto-2");
+
+    engine.destroy();
+  });
+
+  it("keeps an existing real name and never overwrites it", () => {
+    const { root } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.insertText();
+    const box = engine.getSelected();
+    box.setAttribute("data-slide-name", "hero-title");
+    box.removeAttribute("data-slide-name-default");
+    engine.insertText(); // a second text box must not disturb the first
+
+    expect(box.getAttribute("data-slide-name")).toBe("hero-title");
+
+    engine.destroy();
+  });
+
+  it("surfaces the name in getLayerTree", () => {
+    const { root } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+
+    engine.insertIcon("star");
+    const tree = engine.getLayerTree();
+    const iconNode = tree.find((n) => n.tag === "div" && n.name === "icon-star");
+    expect(iconNode).toBeTruthy();
+    // Legacy content-derived `text` field is gone; names drive the panel.
+    expect(iconNode.text).toBeUndefined();
+
+    engine.destroy();
+  });
+
+  it("persists the name through the serialized snapshot", () => {
+    const { root } = makeRoot();
+    const onChange = vi.fn();
+    const engine = createSlideEditor({ root, onChange, onSelection: vi.fn() });
+
+    engine.insertImageBox({ id: 1, url: "media/a.svg", originalName: "Banner.png" });
+    // The engine emits the full-slide serialized HTML (incl. names) via onChange.
+    const html = onChange.mock.calls.at(-1)[0];
+    expect(html).toContain('data-slide-name="banner"');
+
+    engine.destroy();
+  });
+});

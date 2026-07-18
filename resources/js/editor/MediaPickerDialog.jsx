@@ -194,6 +194,7 @@ export function MediaPickerDialog({ open, onClose, onPick, presentationId = null
                         id: asset.id,
                         path: asset.path,
                         url: asset.url,
+                        originalName: asset.original_name,
                       })
                     }
                     className="group relative aspect-square overflow-hidden rounded-md border border-[var(--border)] bg-[var(--background)] hover:ring-2 hover:ring-[var(--navy)]"

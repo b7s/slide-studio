@@ -25,6 +25,7 @@ const HIGHLIGHT = "#2f6df6";
 import {ICON_CATALOG} from "./icons.config";
 import {applyListToElement} from "./listFormat";
 import {rewriteMediaUrlsToPreview, rewriteMediaUrlsToStorage} from "../lib/mediaUrl";
+import {slugify, summarizeText} from "../lib/slug";
 
 function num(v) {
   const n = parseFloat(v);
@@ -626,7 +627,187 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     updateToolbar();
   }
 
-  function setEditable(on) {
+  // Build the `tag > tag > …` selector for an element, identical to the one
+  // reported in `selectionInfo()` so it round-trips through `selectByPath`.
+  function pathOf(el) {
+    const segs = [];
+    let n = el;
+    while (n && n !== slideRoot()) {
+      segs.push(n.tagName.toLowerCase());
+      n = n.parentElement;
+    }
+    return segs.reverse().join(" > ");
+  }
+
+  // Resolve a `tag > tag > …` path to a concrete element inside the slide
+  // root. Document order is deterministic, so the same string that identifies
+  // an element during selection resolves back to that exact element.
+  function elementByPath(path) {
+    if (!path) return null;
+    return slideRoot().querySelector(path);
+  }
+
+  // Select an element by its slide-relative path. Used by the Layers panel so
+  // a panel click maps to the same selection the canvas would produce.
+  function selectByPath(path, opts) {
+    const el = elementByPath(path);
+    if (el) select(el, opts);
+    return el || null;
+  }
+
+  // Build a serialisable tree of every box on the slide (direct children of
+  // the slide root and their descendants), ordered top-to-bottom as they
+  // appear in the DOM (which mirrors paint/z-order for static positioned and
+  // reflects document order for absolutely positioned boxes). The Layers panel
+  // consumes this to render the same items the user sees on the slide without
+  // re-implementing DOM traversal.
+  function getLayerTree() {
+    const root = slideRoot();
+    const walk = (node) => {
+      const children = Array.from(node.children)
+        .filter((el) => el.getAttribute && el.getAttribute("data-slide-overlay") === null)
+        .map((el) => ({
+          tag: el.tagName.toLowerCase(),
+          path: pathOf(el),
+          name: el.getAttribute("data-slide-name") || "",
+          hasIcon: !!el.querySelector("[data-slide-icon]"),
+          isGroup: el.getAttribute && el.getAttribute("data-slide-group") != null,
+          children: walk(el),
+        }));
+      return children;
+    };
+    return walk(root);
+  }
+
+  // Move a dragged element relative to a target element in the slide DOM. This
+  // is what powers drag-and-drop in the Layers panel: `position` is one of
+  // "before" / "after" (reorder siblings) or "inside" (reparent the dragged
+  // element as a child of the target). The operation is a pure DOM move so the
+  // slide stays the single source of truth — the panel never keeps its own
+  // tree, it just re-reads `getLayerTree()` afterwards. A drag onto itself or
+  // onto one of its own descendants is a no-op to avoid corrupting the tree.
+  function moveElement(dragPath, targetPath, position) {
+    if (!dragPath || !targetPath || dragPath === targetPath) return;
+    const drag = elementByPath(dragPath);
+    const target = elementByPath(targetPath);
+    if (!drag || !target) return;
+    // Reject drops that would make an element its own ancestor.
+    if (drag.contains(target)) return;
+
+    const sr = slideRoot();
+    if (position === "inside") {
+      // Don't reparent top-level boxes into the slide root (no-op) or nest a
+      // box into an element it already directly lives under.
+      if (target === sr) return;
+      if (drag.parentElement === target) return;
+      target.appendChild(drag);
+    } else if (position === "before") {
+      if (drag.parentElement === target.parentElement && drag === target) return;
+      target.parentElement.insertBefore(drag, target);
+    } else if (position === "after") {
+      if (drag.parentElement === target.parentElement && drag === target) return;
+      target.parentElement.insertBefore(drag, target.nextSibling);
+    } else {
+      return;
+    }
+
+    // Re-select the moved element and persist the structural change.
+    select(drag);
+    pushHistory();
+    emit();
+  }
+
+  // ---- item naming -------------------------------------------------------
+  // Every selectable box carries a human-readable `data-slide-name` so the
+  // Layers panel and the hover label can identify it without leaning on the
+  // box's raw (possibly huge/empty/markup) content. A name is assigned when
+  // the box is created from its *type* (text → summary, image → original
+  // filename, icon → icon name…); once a real name exists it is never
+  // overwritten. Boxes created with an auto placeholder ("texto", "tabela"…)
+  // are flagged so they upgrade to a real summary once the user adds content.
+  const NAME_ATTR = "data-slide-name";
+  const NAME_DEFAULT_ATTR = "data-slide-name-default";
+
+  // The set of `data-slide-name` values already in use on the slide. Used to
+  // make every generated name unique (append -2, -3…) so the Layers panel
+  // never shows two identical rows.
+  function collectNames() {
+    const names = new Set();
+    slideRoot().querySelectorAll(`[${NAME_ATTR}]`).forEach((el) => {
+      const v = el.getAttribute(NAME_ATTR);
+      if (v) names.add(v);
+    });
+    return names;
+  }
+
+  // Append a numeric suffix until `base` is not in `names`.
+  function uniqueName(base, names) {
+    const slug = slugify(base) || "item";
+    if (!names.has(slug)) return slug;
+    let i = 2;
+    while (names.has(`${slug}-${i}`)) i += 1;
+    return `${slug}-${i}`;
+  }
+
+  // Derive the *base* (pre-uniqueness) name for a box from its type + content.
+  function baseNameFor(kind, opts = {}) {
+    if (kind === "icon" && opts.iconName) return `icon-${slugify(opts.iconName)}`;
+    if (kind === "image") {
+      const src = opts.imageName || opts.imagePath || "";
+      const file = src.split("/").pop().split("?")[0] || "";
+      const base = file.replace(/\.[^.]+$/, "");
+      return slugify(base) || "imagem";
+    }
+    if (kind === "table") return "tabela";
+    if (kind === "group") return "grupo";
+    if (kind === "text") {
+      const summary = summarizeText(opts.text, 3);
+      return summary || "texto";
+    }
+    return slugify(opts.tag || kind) || "item";
+  }
+
+  // Assign a name to `el`. Keeps any existing *real* name; otherwise generates
+  // a unique one. When `placeholder` is true the name is flagged so it can be
+  // upgraded later (e.g. a text box summarised once the user types).
+  function assignName(el, kind, opts = {}) {
+    if (!el) return;
+    // Keep any existing *real* name — never overwrite. A placeholder flag means
+    // the name is still auto and may be upgraded later (e.g. a text box
+    // summarised once the user types).
+    if (el.hasAttribute(NAME_ATTR) && !el.hasAttribute(NAME_DEFAULT_ATTR)) return;
+    const base = baseNameFor(kind, { ...opts, tag: el.tagName.toLowerCase() });
+    const name = uniqueName(base, collectNames());
+    el.setAttribute(NAME_ATTR, name);
+    if (opts.placeholder) el.setAttribute(NAME_DEFAULT_ATTR, "1");
+    else el.removeAttribute(NAME_DEFAULT_ATTR);
+  }
+
+  // Upgrade a placeholder name to a real one derived from current content
+  // (called when the user adds text to a freshly-inserted text box). No-op if
+  // the box already carries a real name.
+  function upgradePlaceholderName(el, kind, opts = {}) {
+    if (!el || !el.hasAttribute(NAME_DEFAULT_ATTR)) return;
+    const base = baseNameFor(kind, { ...opts, tag: el.tagName.toLowerCase() });
+    if (!base || base === "texto") return; // nothing meaningful yet
+    const name = uniqueName(base, collectNames());
+    el.setAttribute(NAME_ATTR, name);
+    el.removeAttribute(NAME_DEFAULT_ATTR);
+  }
+
+  // Ensure a (cloned / pasted) box does not share a name with another box on
+  // the slide. If its current name collides, rename it to a unique variant,
+  // preserving the placeholder flag it may carry.
+  function ensureUniqueName(el) {
+    if (!el) return;
+    const current = el.getAttribute(NAME_ATTR);
+    if (!current) return;
+    const same = slideRoot().querySelectorAll(`[${NAME_ATTR}="${current}"]`);
+    if (same.length <= 1) return; // no collision — name is already unique
+    // Rename against every name currently on the slide (the colliding sibling
+    // is included, so the clone becomes "texto-2" rather than keeping "texto").
+    el.setAttribute(NAME_ATTR, uniqueName(current, collectNames()));
+  }  function setEditable(on) {
     if (!selected || !isTextEditable(selected)) return;
     selected.setAttribute("contenteditable", on ? "true" : "false");
     if (on) selected.focus();
@@ -970,6 +1151,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     wrap.style.cursor = "move";
     wrap.style.zIndex = "1";
     wrap.style.outline = "none";
+    assignName(wrap, "group");
 
     // Insert the wrapper before the first box, then move every box inside,
     // offsetting its coordinates to the wrapper origin.
@@ -1165,6 +1347,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     const node = tmp.firstElementChild;
     if (!node) return;
     (selected || slideRoot()).appendChild(node);
+    ensureUniqueName(node);
     pushHistory();
     emit();
   }
@@ -1184,6 +1367,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     clone.style.left = `${left}px`;
     clone.style.top = `${top}px`;
     box.parentNode.insertBefore(clone, box.nextSibling);
+    ensureUniqueName(clone);
     select(clone);
     pushHistory();
     emit();
@@ -1324,6 +1508,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     el.style.outline = "none";
     el.setAttribute("contenteditable", "true");
     root.appendChild(el);
+    assignName(el, "text", { placeholder: true });
     select(el);
     el.focus();
     pushHistory();
@@ -1379,6 +1564,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     el.style.justifyContent = "center";
     el.appendChild(svg);
     root.appendChild(el);
+    assignName(el, "icon", { iconName: name });
     select(el);
     pushHistory();
     emit();
@@ -1422,6 +1608,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     el.style.border = "1px solid #e2e8f0";
     el.appendChild(table);
     root.appendChild(el);
+    assignName(el, "table");
     select(el);
     pushHistory();
     emit();
@@ -1450,6 +1637,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     el.style.backgroundSize = "contain";
     el.style.backgroundPosition = "center";
     root.appendChild(el);
+    assignName(el, "image", { imageName: asset.originalName, imagePath: asset.path });
     select(el);
     pushHistory();
     emit();
@@ -1587,6 +1775,10 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     if (!selected) return;
     const editable = editing || selected.getAttribute("contenteditable") === "true";
     if (editable) {
+      // Upgrade a freshly-inserted text box's placeholder name to a real
+      // summary of what the user just typed (once). No-op for boxes that
+      // already carry a real name or have no content yet.
+      upgradePlaceholderName(selected, "text", { text: selected.textContent });
       selectionInfo();
       positionOverlay();
       emit();
@@ -1671,7 +1863,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     layer.style.inset = "0";
     layer.style.pointerEvents = "none";
     layer.style.zIndex = "2147483645";
-    ["leaf", "box"].forEach((kind) => {
+    ["leaf", "box", "name"].forEach((kind) => {
       const el = document.createElement("div");
       el.setAttribute(`data-slide-hover-${kind}`, "1");
       el.style.position = "absolute";
@@ -1679,6 +1871,20 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
       el.style.pointerEvents = "none";
       el.style.borderRadius = "3px";
       el.style.display = "none";
+      if (kind === "name") {
+        // Small floating pill showing the box's name above its top border, so
+        // the user can identify items on hover. Styled inline because the
+        // Shadow DOM can't see the editor's CSS variables.
+        el.style.background = HIGHLIGHT;
+        el.style.color = "#ffffff";
+        el.style.fontSize = "10px";
+        el.style.lineHeight = "1";
+        el.style.padding = "2px 6px";
+        el.style.borderRadius = "4px";
+        el.style.whiteSpace = "nowrap";
+        el.style.fontFamily = "inherit";
+        el.style.transform = "translateY(-100%)";
+      }
       layer.appendChild(el);
     });
     root.appendChild(layer);
@@ -1699,11 +1905,31 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     el.style.display = "block";
   }
 
+  // Position the floating name pill just above the box's top border, matching
+  // the box outline's coordinate space. Hidden when the box has no name (it
+  // falls back to the tag so the pill is still useful).
+  function positionNameLabel(box) {
+    if (!box) return;
+    const label = hoverLayer?.querySelector("[data-slide-hover-name]");
+    if (!label) return;
+    const name = box.getAttribute("data-slide-name") || box.tagName.toLowerCase();
+    label.textContent = name;
+    const r = box.getBoundingClientRect();
+    const host = root.host ?? root;
+    const sr = host.getBoundingClientRect();
+    const scale = sr.width > 0 ? sr.width / Math.max(1, host.offsetWidth) : 1;
+    let top = (r.top - sr.top) / scale - 4;
+    if (top < 0) top = 0;
+    label.style.left = `${(r.left - sr.left) / scale}px`;
+    label.style.top = `${top}px`;
+    label.style.display = "block";
+  }
+
   function clearHoverOutlines() {
     hoverLeaf = null;
     hoverBox = null;
     if (!hoverLayer) return;
-    hoverLayer.querySelectorAll("[data-slide-hover-leaf], [data-slide-hover-box]").forEach((el) => {
+    hoverLayer.querySelectorAll("[data-slide-hover-leaf], [data-slide-hover-box], [data-slide-hover-name]").forEach((el) => {
       el.style.display = "none";
     });
   }
@@ -1731,6 +1957,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     if (!hoverLayer) hoverLayer = buildHoverLayer();
     positionHover(t, hoverLayer.querySelector("[data-slide-hover-leaf]"));
     positionHover(box, hoverLayer.querySelector("[data-slide-hover-box]"));
+    positionNameLabel(box);
     hoverLeaf = t;
     hoverBox = box;
   }
@@ -1791,7 +2018,12 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
 
   return {
     select,
+    selectByPath,
+    moveElement,
     clearSelection,
+    getSlideRoot: slideRoot,
+    getLayerTree,
+    pathOf,
     setEditing,
     beginTextEdit,
     exitTextEdit,

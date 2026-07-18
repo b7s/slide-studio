@@ -227,6 +227,7 @@ return [
         'up' => 'Up',
         'down' => 'Down',
         'right' => 'Right',
+        'empty' => 'No elements on this slide.',
     ],
     'workspace' => [
         'undo' => 'Undo',

@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Storage;
  * @property int $user_id
  * @property string $path
  * @property string|null $mime
+ * @property string|null $original_name
  * @property string|null $data
  * @property string $url
  * @property Carbon|null $last_used_at
@@ -30,6 +31,7 @@ final class Asset extends Model
         'user_id',
         'path',
         'mime',
+        'original_name',
         'data',
         'last_used_at',
     ];

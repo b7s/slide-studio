@@ -228,6 +228,7 @@ return [
         'up' => 'Cima',
         'down' => 'Baixo',
         'right' => 'Direita',
+        'empty' => 'Nenhum elemento neste slide.',
     ],
     'workspace' => [
         'undo' => 'Desfazer',

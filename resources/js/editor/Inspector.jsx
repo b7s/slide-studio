@@ -62,6 +62,100 @@ function AlignOption({ icon: Icon, active, label, onClick }) {
   );
 }
 
+// One row in the Layers panel. Layers are listed front-to-back (the topmost
+// painted element first) so the order matches what the user sees; each row is
+// indented by its depth in the slide's element tree. Clicking a row selects
+// the corresponding element on the slide via the engine's existing path-based
+// selector — no duplicated selection logic. Rows are also drag handles:
+// dropping before/after reorders siblings, dropping in the middle reparents
+// the dragged element *inside* the target.
+function LayerItem({
+  node,
+  depth,
+  selectedPath,
+  onSelect,
+  dragPath,
+  setDragPath,
+  onMove,
+  dropTarget,
+}) {
+  const label = node.name || node.tag;
+  const active = selectedPath === node.path;
+  const isDragging = dragPath === node.path;
+  // Visual feedback for the current drop position over this row.
+  const drop = dropTarget && dropTarget.path === node.path ? dropTarget.position : null;
+
+  // Decide the drop position from the pointer's vertical position in the row:
+  // top quarter = before, bottom quarter = after, middle = inside (reparent).
+  const positionAt = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - r.top;
+    if (y < r.height * 0.25) return "before";
+    if (y > r.height * 0.75) return "after";
+    return "inside";
+  };
+
+  return (
+    <li
+      onDragOver={(e) => {
+        if (!dragPath || dragPath === node.path) return;
+        e.preventDefault();
+        onMove.preview(node.path, positionAt(e));
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        if (!dragPath || dragPath === node.path) return;
+        onMove.commit(dragPath, node.path, positionAt(e));
+      }}
+    >
+      <button
+        type="button"
+        draggable
+        onClick={() => onSelect(node.path)}
+        onDragStart={(e) => {
+          e.stopPropagation();
+          setDragPath(node.path);
+        }}
+        onDragEnd={() => setDragPath(null)}
+        title={node.path}
+        className={cn(
+          "flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[12.5px] transition-colors",
+          active
+            ? "font-semibold"
+            : "text-[var(--foreground)] hover:bg-[var(--secondary)]",
+          isDragging && "opacity-40",
+          drop === "inside" && "ring-1 ring-[var(--highlight)]"
+        )}
+        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+      >
+        {node.isGroup && <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--muted-foreground)]">▣</span>}
+        {node.hasIcon && <span className="text-[10px] text-[var(--muted-foreground)]">✦</span>}
+        <span className="truncate">{label}</span>
+        <span className={cn("ml-auto shrink-0 pl-1 text-[10px]", active ? "text-[var(--highlight)]" : "text-[var(--muted-foreground)]")}>{node.tag}</span>
+      </button>
+      {drop === "before" && <div className="mx-2 my-0.5 h-0.5 rounded bg-[var(--highlight)]" />}
+      {drop === "after" && <div className="mx-2 my-0.5 h-0.5 rounded bg-[var(--highlight)]" />}
+      {node.children && node.children.length > 0 && (
+        <ul className="grid gap-0.5">
+          {node.children.map((child) => (
+            <LayerItem
+              key={child.path}
+              node={child}
+              depth={depth + 1}
+              selectedPath={selectedPath}
+              onSelect={onSelect}
+              dragPath={dragPath}
+              setDragPath={setDragPath}
+              onMove={onMove}
+              dropTarget={dropTarget}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
 // Tags we keep when round-tripping HTML between the slide and the rich-text
 // editor. Everything else is unwrapped so the slide never inherits stray
 // markup (icons, layout wrappers, data attributes) from the inspector.
@@ -760,10 +854,39 @@ function Section({ id, label, children }) {
 }
 
 export default function Inspector() {
-  const { selection, cmd, presentationId } = useEditor();
+  const { selection, cmd, presentationId, html, slideKey } = useEditor();
   const [tab, setTab] = useState("props");
   const [nudgeStep, setNudgeStep] = useState(8);
   const [listKind, setListKind] = useState(null);
+  const [layers, setLayers] = useState([]);
+  const [dragPath, setDragPath] = useState(null);
+  const [dropTarget, setDropTarget] = useState(null);
+
+  // Drag-and-drop controller for the Layers panel. `preview` only updates the
+  // visual drop indicator; `commit` performs the actual DOM move through the
+  // engine (moveElement) and refreshes the tree. Both guard against dropping an
+  // element onto itself.
+  const onMove = {
+    preview: (path, position) => setDropTarget({ path, position }),
+    commit: (from, to, position) => {
+      if (from && to && from !== to) cmd.moveElement(from, to, position);
+      setDropTarget(null);
+      setDragPath(null);
+    },
+  };
+
+  // Mirror the slide's element tree into the Layers panel. Loaded lazily when
+  // the Camadas tab is opened, then refreshed on selection/content changes so
+  // added/removed/moved boxes appear without a manual refresh. The engine owns
+  // DOM traversal (pathOf / getLayerTree); we only reverse to show the
+  // front-most box on top.
+  useEffect(() => {
+    if (tab !== "layers") return;
+    const tree = cmd.getLayerTree ? cmd.getLayerTree() : [];
+    const reverse = (nodes) =>
+      (nodes || []).map((n) => ({ ...n, children: reverse(n.children) })).reverse();
+    setLayers(reverse(tree));
+  }, [tab, html, slideKey, selection]);
 
   const s = selection;
   const box = s?.box ?? {};
@@ -1101,17 +1224,35 @@ export default function Inspector() {
           </Button>
         </TabsContent>
 
-        <TabsContent value="layers" className="flex-1 overflow-auto px-4 pb-4">
-          <div className="grid gap-2">
-            <div className="grid grid-cols-4 gap-1.5">
-              <Button variant="secondary" size="icon" disabled={disabled} onClick={cmd.bringForward} aria-label={__("messages.layers.forward")}><ChevronUp /></Button>
-              <Button variant="secondary" size="icon" disabled={disabled} onClick={cmd.sendBackward} aria-label={__("messages.layers.backward")}><ChevronDown /></Button>
-              <Button variant="secondary" size="icon" disabled={disabled} onClick={cmd.bringForward} aria-label={__("messages.layers.front")}><ChevronsUp /></Button>
-              <Button variant="secondary" size="icon" disabled={disabled} onClick={cmd.sendBackward} aria-label={__("messages.layers.back")}><ChevronsDown /></Button>
-            </div>
-            <p className="text-[11.5px] text-[var(--muted-foreground)]">
-              {s ? s.tag : __("messages.inspector.no_selection")}
-            </p>
+        <TabsContent value="layers" className="flex flex-1 flex-col overflow-hidden">
+          <div className="grid grid-cols-4 gap-1.5 px-4 pt-2">
+            <Button variant="secondary" size="icon" disabled={disabled} onClick={cmd.bringForward} aria-label={__("messages.layers.forward")}><ChevronUp /></Button>
+            <Button variant="secondary" size="icon" disabled={disabled} onClick={cmd.sendBackward} aria-label={__("messages.layers.backward")}><ChevronDown /></Button>
+            <Button variant="secondary" size="icon" disabled={disabled} onClick={cmd.bringForward} aria-label={__("messages.layers.front")}><ChevronsUp /></Button>
+            <Button variant="secondary" size="icon" disabled={disabled} onClick={cmd.sendBackward} aria-label={__("messages.layers.back")}><ChevronsDown /></Button>
+          </div>
+          <div className="flex-1 overflow-auto px-4 pb-4 pt-2">
+            {layers.length === 0 ? (
+              <p className="text-[11.5px] text-[var(--muted-foreground)]">
+                {__("messages.layers.empty")}
+              </p>
+            ) : (
+              <ul className="grid gap-0.5">
+                {(layers || []).map((node) => (
+                  <LayerItem
+                    key={node.path}
+                    node={node}
+                    depth={0}
+                    selectedPath={s?.path}
+                    onSelect={(path) => cmd.selectByPath(path)}
+                    dragPath={dragPath}
+                    setDragPath={setDragPath}
+                    onMove={onMove}
+                    dropTarget={dropTarget}
+                  />
+                ))}
+              </ul>
+            )}
           </div>
         </TabsContent>
       </Tabs>

@@ -18,6 +18,7 @@ final class AssetResource extends JsonResource
             'path' => $this->resource->path,
             'url' => $this->resource->url,
             'mime' => $this->resource->mime,
+            'original_name' => $this->resource->original_name,
             'last_used_at' => $this->resource->last_used_at === null ? null : $this->resource->last_used_at->toISOString(),
             'created_at' => $this->resource->created_at->toISOString(),
         ];
