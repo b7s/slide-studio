@@ -12,6 +12,7 @@ import {MediaPickerDialog} from "./MediaPickerDialog";
 import SlideCanvas from "./SlideCanvas";
 import ContextMenu from "./ContextMenu";
 import TextToolbar from "./TextToolbar";
+import RenameDialog from "./RenameDialog";
 import {
     AlertCircle,
     CheckCircle2,
@@ -27,6 +28,7 @@ import {
     Maximize,
     Minimize2,
     Minus,
+    Pencil,
     Plus,
     Redo2,
     Save,
@@ -76,6 +78,11 @@ export default function Workspace() {
     presentationId,
     undo: undoStructural,
     redo: redoStructural,
+    renameBoxPath,
+    renameBoxName,
+    renameBoxOpen,
+    requestRenameBox,
+    closeRenameBox,
   } = useEditor();
 
   const stageRef = useRef(null);
@@ -232,6 +239,14 @@ export default function Workspace() {
       const engine = engineRef.current;
       if (!engine) return;
       const mod = e.ctrlKey || e.metaKey;
+      // Ctrl/Cmd+S saves the slide instead of triggering the browser's
+      // "save page" dialog. Handled before the input guard so it also works
+      // while a field/input is focused, and regardless of edit mode.
+      if (mod && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        save();
+        return;
+      }
       // Undo/redo: structural history first, then canvas content undo.
       if (mod && e.key.toLowerCase() === "z") {
         e.preventDefault();
@@ -327,6 +342,10 @@ export default function Workspace() {
 
   const hasGroup = !!(selection && selection.isGroup);
   const contextItems = menu && menu.hasSelection ? [
+    { icon: <Pencil className="size-3.5" />, label: __("messages.context_menu.rename"), onClick: () => {
+        requestRenameBox(null, selection?.name || "");
+      } },
+    { separator: true },
     { icon: <ClipboardCopy className="size-3.5" />, label: __("messages.context_menu.duplicate"), onClick: cmd.duplicate },
     { separator: true },
     { icon: <Copy className="size-3.5" />, label: __("messages.context_menu.copy"), onClick: cmd.copy },
@@ -623,6 +642,22 @@ export default function Workspace() {
         position={menu}
         items={contextItems}
         onClose={() => setMenu(null)}
+      />
+
+      <RenameDialog
+        open={renameBoxOpen}
+        title={__("messages.dialog.rename_title")}
+        description={__("messages.dialog.rename_desc")}
+        label={__("messages.dialog.rename_label")}
+        initialValue={renameBoxPath ? "" : (selection?.name || "")}
+        confirmLabel={__("messages.dialog.rename_confirm")}
+        onClose={closeRenameBox}
+        onRename={(name) => {
+          if (renameBoxPath) {
+            cmd.selectByPath(renameBoxPath);
+          }
+          cmd.renameSelected(name);
+        }}
       />
 
       <MediaPickerDialog

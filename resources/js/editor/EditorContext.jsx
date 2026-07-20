@@ -1,18 +1,11 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import {createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,} from "react";
 import {router} from "@inertiajs/react";
 import {route} from "../lib/routes";
 import * as api from "../lib/api";
-import { toast } from "sonner";
-import { __ } from "../lib/i18n";
-import { SLIDE_BG, SLIDE_COLOR, SLIDE_FONT } from "../lib/slideStyle";
+import {toast} from "sonner";
+import {__} from "../lib/i18n";
+import {SLIDE_BG, SLIDE_COLOR, SLIDE_FONT} from "../lib/slideStyle";
+import {buildFontFaceCss} from "./fonts.config";
 
 const EditorContext = createContext(null);
 
@@ -55,6 +48,9 @@ export function EditorProvider({
   const [editMode, setEditMode] = useState(false);
   const [selection, setSelection] = useState(null);
   const [slideFullscreen, setSlideFullscreen] = useState(false);
+  const [renameBoxPath, setRenameBoxPath] = useState(null);
+  const [renameBoxName, setRenameBoxName] = useState("");
+  const [renameBoxOpen, setRenameBoxOpen] = useState(false);
 
   const engineRef = useRef(null);
   const presentationIdRef = useRef(presentationId);
@@ -477,10 +473,8 @@ export function EditorProvider({
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${file}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <style>
+${buildFontFaceCss(window.location.origin)}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;min-height:100dvh;background:${SLIDE_BG};display:flex;align-items:center;justify-content:center;font-family:${SLIDE_FONT}}
 .slide{width:1600px;height:900px;background:${SLIDE_BG};color:${SLIDE_COLOR};position:relative;overflow:hidden;max-width:100vw;max-height:100dvh;object-fit:contain}
@@ -539,6 +533,20 @@ ul,ol{margin:0;padding-left:1.4em}li{margin:0}
   const toggleEditMode = useCallback(() => setEditMode((v) => !v), []);
   const toggleSlideFullscreen = useCallback(() => setSlideFullscreen((v) => !v), []);
 
+  // Open the rename box dialog for a specific box (or the current selection if
+  // path is null). `name` pre-fills the dialog.
+  const requestRenameBox = useCallback((path = null, name = "") => {
+    setRenameBoxPath(path);
+    setRenameBoxName(name ?? "");
+    setRenameBoxOpen(true);
+  }, []);
+
+  const closeRenameBox = useCallback(() => {
+    setRenameBoxPath(null);
+    setRenameBoxName("");
+    setRenameBoxOpen(false);
+  }, []);
+
   const onHtmlChange = useCallback((nextHtml) => {
     setHtml(nextHtml);
   }, []);
@@ -592,6 +600,7 @@ ul,ol{margin:0;padding-left:1.4em}li{margin:0}
       getSelected: run("getSelected"),
       selectByPath: run("selectByPath"),
       moveElement: run("moveElement"),
+      renameSelected: run("renameSelected"),
       getLayerTree: run("getLayerTree"),
       getSlideRoot: run("getSlideRoot"),
       setIcon: run("setIcon"),
@@ -606,6 +615,8 @@ ul,ol{margin:0;padding-left:1.4em}li{margin:0}
       exitTextEdit: run("exitTextEdit"),
       setStyle: run("setStyle"),
       setStyles: run("setStyles"),
+      setSlideStyle: run("setSlideStyle"),
+      setSlideStyles: run("setSlideStyles"),
     };
   }, []);
 
@@ -739,6 +750,11 @@ ul,ol{margin:0;padding-left:1.4em}li{margin:0}
       deleteSlide,
       renameSlide,
       renamePresentation,
+      renameBoxPath,
+      renameBoxName,
+      renameBoxOpen,
+      requestRenameBox,
+      closeRenameBox,
       undo,
       redo,
     }),
@@ -777,6 +793,11 @@ ul,ol{margin:0;padding-left:1.4em}li{margin:0}
       deleteSlide,
       renameSlide,
       renamePresentation,
+      renameBoxPath,
+      renameBoxName,
+      renameBoxOpen,
+      requestRenameBox,
+      closeRenameBox,
       undo,
       redo,
       slideFullscreen,

@@ -577,7 +577,6 @@ describe("slideEditor item naming", () => {
     expect(engine.getSelected().getAttribute("data-slide-name")).toBe("grupo");
 
     engine.destroy();
-    root.remove();
   });
 
   it("makes duplicated names unique", () => {
@@ -666,6 +665,71 @@ describe("slideEditor item naming", () => {
     // The engine emits the full-slide serialized HTML (incl. names) via onChange.
     const html = onChange.mock.calls.at(-1)[0];
     expect(html).toContain('data-slide-name="banner"');
+
+    engine.destroy();
+  });
+
+  it("renames the selected box via renameSelected and clears the placeholder flag", () => {
+    const { root } = makeRoot();
+    const onChange = vi.fn();
+    const engine = createSlideEditor({ root, onChange, onSelection: vi.fn() });
+
+    engine.insertText();
+    const box = engine.getSelected();
+    // Starts as a placeholder name flagged for auto-upgrade.
+    expect(box.getAttribute("data-slide-name")).toBe("texto");
+    expect(box.hasAttribute("data-slide-name-default")).toBe(true);
+
+    engine.renameSelected("My Heading");
+    expect(box.getAttribute("data-slide-name")).toBe("My Heading");
+    // An explicit rename is final — never auto-overwritten.
+    expect(box.hasAttribute("data-slide-name-default")).toBe(false);
+    expect(engine.getLayerTree().some((n) => n.name === "My Heading")).toBe(true);
+
+    // Empty / whitespace renames are ignored, keeping the explicit name.
+    engine.renameSelected("   ");
+    expect(box.getAttribute("data-slide-name")).toBe("My Heading");
+
+    // The renamed name is persisted in the serialized snapshot.
+    expect(onChange.mock.calls.at(-1)[0]).toContain('data-slide-name="My Heading"');
+
+    engine.destroy();
+  });
+});
+
+describe("slideEditor slide-root styling", () => {
+  it("sets inline styles on the slide root without a selection", () => {
+    const { root } = makeRoot();
+    const onChange = vi.fn();
+    const engine = createSlideEditor({ root, onChange, onSelection: vi.fn() });
+    expect(engine.getSelected()).toBeNull();
+
+    engine.setSlideStyle("fontFamily", "Georgia");
+    engine.setSlideStyles({ backgroundColor: "rgb(0, 0, 0)", fontSize: "32px" });
+
+    const slide = root.querySelector(".slide");
+    expect(slide.style.fontFamily).toBe("Georgia");
+    expect(slide.style.backgroundColor).toBe("rgb(0, 0, 0)");
+    expect(slide.style.fontSize).toBe("32px");
+    // Changing the slide root still emits a save-worthy change.
+    expect(onChange).toHaveBeenCalled();
+    // …and the emitted snapshot must actually contain the new style, so the
+    // autosave/dirty detection sees the slide as changed.
+    const lastHtml = onChange.mock.calls.at(-1)[0];
+    expect(lastHtml).toContain("Georgia");
+    expect(lastHtml).toContain("32px");
+
+    engine.destroy();
+  });
+
+  it("never touches the slide root style when setStyle targets nothing", () => {
+    const { root } = makeRoot();
+    const engine = createSlideEditor({ root, onChange: vi.fn(), onSelection: vi.fn() });
+    engine.setStyle("fontFamily", "Arial");
+
+    const slide = root.querySelector(".slide");
+    expect(slide.style.fontFamily).toBe("");
+    expect(slide.querySelector("div").style.fontFamily).toBe("");
 
     engine.destroy();
   });

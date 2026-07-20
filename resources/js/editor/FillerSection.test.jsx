@@ -11,9 +11,33 @@ function makeCmd() {
 }
 
 describe("FillerSection", () => {
-  it("renders the three filler type options", () => {
+  it("renders the four filler type options (None is the default)", () => {
     render(<FillerSection st={{}} cmd={makeCmd()} presentationId={1} />);
-    expect(screen.getByRole("combobox").querySelectorAll("option")).toHaveLength(3);
+    expect(screen.getByRole("combobox").querySelectorAll("option")).toHaveLength(4);
+    expect(screen.getByRole("combobox")).toHaveValue("none");
+  });
+
+  it("clears every background longhand when switching to None", () => {
+    const cmd = makeCmd();
+    render(
+      <FillerSection
+        st={{ backgroundColor: "rgb(255, 0, 0)", backgroundImage: "url(x.png)" }}
+        cmd={cmd}
+        presentationId={1}
+      />
+    );
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "none" } });
+    expect(cmd.setStyles).toHaveBeenCalledWith({
+      background: "",
+      backgroundColor: "",
+      backgroundImage: "",
+      backgroundRepeat: "",
+      backgroundSize: "",
+      backgroundPosition: "",
+      backgroundAttachment: "",
+      backgroundOrigin: "",
+      backgroundClip: "",
+    });
   });
 
   it("applies a solid colour default when switching to solid mode", () => {
@@ -66,7 +90,7 @@ describe("FillerSection", () => {
     );
   });
 
-  it("applies background alpha when the opacity slider changes (gradient)", () => {
+  it("applies background alpha when the 'from' opacity slider changes (gradient)", () => {
     const cmd = makeCmd();
     render(
       <FillerSection
@@ -75,7 +99,8 @@ describe("FillerSection", () => {
         presentationId={1}
       />
     );
-    fireEvent.change(screen.getByRole("slider"), { target: { value: "50" } });
+    // Two sliders now (from / to); pick the first one.
+    fireEvent.change(screen.getAllByRole("slider")[0], { target: { value: "50" } });
     expect(cmd.setStyles).toHaveBeenCalledWith(
       expect.objectContaining({ background: expect.stringContaining("rgba(255, 0, 0, 0.5)") })
     );
@@ -90,10 +115,45 @@ describe("FillerSection", () => {
         presentationId={1}
       />
     );
-    fireEvent.change(screen.getByRole("slider"), { target: { value: "30" } });
+    // Two sliders now (opacity + backdrop blur); pick the first one.
+    fireEvent.change(screen.getAllByRole("slider")[0], { target: { value: "30" } });
     expect(cmd.setStyles).toHaveBeenCalledWith(
       expect.objectContaining({ backgroundColor: expect.stringContaining("rgba(0, 255, 0, 0.3)") })
     );
+  });
+
+  it("applies backdrop blur without clearing the existing fill", () => {
+    const cmd = makeCmd();
+    render(
+      <FillerSection
+        st={{ backgroundColor: "#ff0000" }}
+        cmd={cmd}
+        presentationId={1}
+      />
+    );
+    // The blur slider is the only other slider in solid mode (index 1).
+    fireEvent.change(screen.getAllByRole("slider")[1], { target: { value: "12" } });
+    // Blur must be applied alone — no background reset.
+    expect(cmd.setStyles).toHaveBeenCalledWith({
+      backdropFilter: "blur(12px)",
+      webkitBackdropFilter: "blur(12px)",
+    });
+  });
+
+  it("clears the blur when set to 0", () => {
+    const cmd = makeCmd();
+    render(
+      <FillerSection
+        st={{ backgroundColor: "#ff0000", backdropFilter: "blur(20px)" }}
+        cmd={cmd}
+        presentationId={1}
+      />
+    );
+    fireEvent.change(screen.getAllByRole("slider")[1], { target: { value: "0" } });
+    expect(cmd.setStyles).toHaveBeenCalledWith({
+      backdropFilter: "",
+      webkitBackdropFilter: "",
+    });
   });
 
   it("switches between linear and radial gradient types", () => {

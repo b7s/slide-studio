@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import {splitColorAlpha, toHex, withAlpha} from "../lib/color";
 import {applyListToElement} from "./listFormat";
 import {Button} from "../Components/ui/button";
@@ -36,8 +36,7 @@ import {__} from "../lib/i18n";
 import {cn} from "../Components/lib/utils";
 import {MediaPickerDialog} from "./MediaPickerDialog";
 import {touchAsset} from "../lib/api";
-
-const FONTS = ["Inter", "Georgia", "Roboto", "Arial", "Times New Roman", "Courier New"];
+import {FontSelector} from "./FontSelector";
 
 function AlignOption({ icon: Icon, active, label, onClick }) {
   return (
@@ -62,8 +61,7 @@ function AlignOption({ icon: Icon, active, label, onClick }) {
 // indented by its depth in the slide's element tree. Clicking a row selects
 // the corresponding element on the slide via the engine's existing path-based
 // selector — no duplicated selection logic. Rows are also drag handles:
-// dropping before/after reorders siblings, dropping in the middle reparents
-// the dragged element *inside* the target.
+// positionAt decides the drop position; onDoubleClick opens the rename dialog.
 function LayerItem({
   node,
   depth,
@@ -73,6 +71,7 @@ function LayerItem({
   setDragPath,
   onMove,
   dropTarget,
+  onStartRename,
 }) {
   const label = node.name || node.tag;
   const active = selectedPath === node.path;
@@ -107,6 +106,7 @@ function LayerItem({
         type="button"
         draggable
         onClick={() => onSelect(node.path)}
+        onDoubleClick={() => onStartRename(node.path, label)}
         onDragStart={(e) => {
           e.stopPropagation();
           setDragPath(node.path);
@@ -143,6 +143,7 @@ function LayerItem({
               setDragPath={setDragPath}
               onMove={onMove}
               dropTarget={dropTarget}
+              onStartRename={onStartRename}
             />
           ))}
         </ul>
@@ -261,11 +262,19 @@ function isGradient(value) {
 // The element's gradient may live in either `background` or `background-image`
 // (the latter after a serialisation round-trip expands the shorthand), so we
 // check both. A real image only counts when it's an actual `url(...)`.
+// Decide which filler type to show. "none" is the default when the element has
+// no background at all (so a fresh box / slide starts on "Nenhum"); a solid
+// colour (either `backgroundColor` or a non-gradient `background` shorthand)
+// maps to "solid".
 function detectFillerMode(st) {
   const image = urlOf(st.backgroundImage);
   if (image && image !== "none") return "image";
   if (isGradient(st.background) || isGradient(st.backgroundImage)) return "gradient";
-  return "solid";
+  if (st.backgroundColor && st.backgroundColor !== "none" && st.backgroundColor !== "transparent") {
+    return "solid";
+  }
+  if (st.background && st.background !== "none" && !isGradient(st.background)) return "solid";
+  return "none";
 }
 
 // Read the gradient from whichever property currently holds it.
@@ -276,13 +285,13 @@ function gradientSource(st) {
 function parseGradient(bg) {
   const m = (bg || "").match(/(linear|radial)-gradient\(([\s\S]+)\)$/);
   if (!m) {
-    return { type: "linear", angle: 135, c1: "#ffffff", c2: "#000000", alpha: 1 };
+    return { type: "linear", angle: 135, c1: "#ffffff", c2: "#000000", alpha1: 1, alpha2: 1 };
   }
   const inner = m[2];
   const type = m[1];
   // Match hex colours and rgb()/rgba() functions so the picker reflects the
   // gradient's actual stops (the browser normalises `linear-gradient(...)` to
-  // `rgb(...)` values) and its alpha.
+  // `rgb(...)` values) and their individual alphas.
   const colors = inner.match(/#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)/gi) || [];
   const am = inner.match(/(\d+)\s*deg/);
   const angle = am ? parseInt(am[1], 10) : 135;
@@ -293,7 +302,8 @@ function parseGradient(bg) {
     angle: type === "radial" ? 0 : angle,
     c1: a1.rgb,
     c2: a2.rgb,
-    alpha: a1.alpha,
+    alpha1: a1.alpha,
+    alpha2: a2.alpha,
   };
 }
 
@@ -303,7 +313,15 @@ function parseSolid(bgColor) {
   return { color: rgb, alpha };
 }
 
-export function FillerSection({ st, cmd, presentationId }) {
+// Read a CSS `backdrop-filter: blur(Npx)` value (browsers serialise it back
+// with the `blur(...)` wrapper) into its pixel radius. Anything we can't parse
+// is treated as 0 (no blur).
+function parseBlur(value) {
+  const m = (value || "").match(/blur\(([\d.]+)px\)/i);
+  return m ? parseFloat(m[1]) : 0;
+}
+
+export function FillerSection({ st, cmd, presentationId, slide = false }) {
   const [mediaOpen, setMediaOpen] = useState(false);
   // `mode` is a controlled local state so the filler-type dropdown switches
   // immediately on change. It re-syncs to the actual box style whenever the
@@ -337,7 +355,7 @@ export function FillerSection({ st, cmd, presentationId }) {
   // previous mode (including a corrupted legacy `background-image`) surviving
   // alongside the new one.
   const applyBackground = (styles) =>
-    cmd.setStyles({
+    (slide ? cmd.setSlideStyles : cmd.setStyles)({
       background: "",
       backgroundColor: "",
       backgroundImage: "",
@@ -350,13 +368,28 @@ export function FillerSection({ st, cmd, presentationId }) {
       ...styles,
     });
 
-  const applyGradient = (type, angle, c1, c2, alpha = 1) => {
-    const a = alpha ?? 1;
+  // Backdrop blur acts on the content *behind* the element (frosted glass). It
+  // is independent of the fill, so the blur slider uses a targeted setStyles
+  // that only writes `backdrop-filter` and `webkit-backdrop-filter` — leaving
+  // the existing background fill in place — unlike `applyBackground` which
+  // resets every `background-*` longhand.
+  const applyBackdropBlur = (px) => {
+    const v = Number(px) || 0;
+    const val = v <= 0 ? "" : `blur(${v}px)`;
+    (slide ? cmd.setSlideStyles : cmd.setStyles)({
+      backdropFilter: val,
+      webkitBackdropFilter: val,
+    });
+  };
+
+  const applyGradient = (type, angle, c1, c2, alpha1 = 1, alpha2 = 1) => {
+    const a1 = alpha1 ?? 1;
+    const a2 = alpha2 ?? 1;
     const value =
       type === "radial"
-        ? `radial-gradient(circle, ${withAlpha(c1, a)}, ${withAlpha(c2, a)})`
-        : `linear-gradient(${angle}deg, ${withAlpha(c1, a)}, ${withAlpha(c2, a)})`;
-    setGrad({ type, angle: type === "radial" ? 0 : angle, c1, c2, alpha: a });
+        ? `radial-gradient(circle, ${withAlpha(c1, a1)}, ${withAlpha(c2, a2)})`
+        : `linear-gradient(${angle}deg, ${withAlpha(c1, a1)}, ${withAlpha(c2, a2)})`;
+    setGrad({ type, angle: type === "radial" ? 0 : angle, c1, c2, alpha1: a1, alpha2: a2 });
     applyBackground({ background: value });
   };
 
@@ -372,15 +405,18 @@ export function FillerSection({ st, cmd, presentationId }) {
       // serialisation round-trip, `background-image`) instead of resetting to a
       // white default every time the mode is (re)selected.
       if (isGradient(st.background) || isGradient(st.backgroundImage)) {
-        applyGradient(grad.type, grad.angle, grad.c1, grad.c2, grad.alpha);
+        applyGradient(grad.type, grad.angle, grad.c1, grad.c2, grad.alpha1, grad.alpha2);
       } else {
-        applyGradient("linear", 135, "#ffffff", "#000000", 1);
+        applyGradient("linear", 135, "#ffffff", "#000000", 1, 1);
       }
     } else if (next === "solid") {
       const s = parseSolid(st.backgroundColor);
       applySolid(s.color, s.alpha);
     } else if (next === "image") {
       setMediaOpen(true);
+    } else if (next === "none") {
+      // Strip every background longhand so the box/slide has no fill.
+      applyBackground({});
     }
   };
 
@@ -409,11 +445,18 @@ export function FillerSection({ st, cmd, presentationId }) {
           onChange={(e) => handleModeChange(e.target.value)}
           className="input-base h-9 w-full px-2"
         >
+          <option value="none">{__("messages.inspector.filler_type_none")}</option>
           <option value="solid">{__("messages.inspector.filler_type_solid")}</option>
           <option value="gradient">{__("messages.inspector.filler_type_gradient")}</option>
           <option value="image">{__("messages.inspector.filler_type_image")}</option>
         </select>
       </Label>
+
+      {mode === "none" && (
+        <p className="text-[11.5px] text-[var(--muted-foreground)]">
+          {__("messages.inspector.filler_none_hint")}
+        </p>
+      )}
 
       {mode === "solid" && (() => {
         const s = parseSolid(st.backgroundColor);
@@ -430,28 +473,36 @@ export function FillerSection({ st, cmd, presentationId }) {
       })()}
 
       {mode === "gradient" && (
-        <div className="grid gap-2">
-          <div className="grid grid-cols-2 gap-2">
+        <div className="grid gap-3">
+          <div className="grid gap-2">
             <ColorField
               label={__("messages.inspector.filler_from")}
               value={grad.c1}
-              onChange={(v) => applyGradient(grad.type, grad.angle, v, grad.c2, grad.alpha)}
+              onChange={(v) => applyGradient(grad.type, grad.angle, v, grad.c2, grad.alpha1, grad.alpha2)}
             />
+            <OpacityControl
+              labelKey="messages.inspector.filler_opacity_from"
+              value={grad.alpha1}
+              onChange={(a) => applyGradient(grad.type, grad.angle, grad.c1, grad.c2, a, grad.alpha2)}
+            />
+          </div>
+          <div className="grid gap-2">
             <ColorField
               label={__("messages.inspector.filler_to")}
               value={grad.c2}
-              onChange={(v) => applyGradient(grad.type, grad.angle, grad.c1, v, grad.alpha)}
+              onChange={(v) => applyGradient(grad.type, grad.angle, grad.c1, v, grad.alpha1, grad.alpha2)}
+            />
+            <OpacityControl
+              labelKey="messages.inspector.filler_opacity_to"
+              value={grad.alpha2}
+              onChange={(a) => applyGradient(grad.type, grad.angle, grad.c1, grad.c2, grad.alpha1, a)}
             />
           </div>
-          <OpacityControl
-            value={grad.alpha}
-            onChange={(a) => applyGradient(grad.type, grad.angle, grad.c1, grad.c2, a)}
-          />
           <Label>
             <span>{__("messages.inspector.filler_gradient_type")}</span>
             <select
               value={grad.type}
-              onChange={(e) => applyGradient(e.target.value, grad.angle, grad.c1, grad.c2, grad.alpha)}
+              onChange={(e) => applyGradient(e.target.value, grad.angle, grad.c1, grad.c2, grad.alpha1, grad.alpha2)}
               className="input-base h-9 w-full px-2"
             >
               <option value="linear">{__("messages.inspector.filler_linear")}</option>
@@ -473,7 +524,7 @@ export function FillerSection({ st, cmd, presentationId }) {
                   key={d.key}
                   type="button"
                   disabled={grad.type === "radial"}
-                  onClick={() => applyGradient("linear", d.angle, grad.c1, grad.c2, grad.alpha)}
+                  onClick={() => applyGradient("linear", d.angle, grad.c1, grad.c2, grad.alpha1, grad.alpha2)}
                   aria-label={`${d.angle}°`}
                   className={cn(
                     "flex h-8 items-center justify-center rounded-md border border-[var(--border)] text-base disabled:opacity-30",
@@ -497,7 +548,7 @@ export function FillerSection({ st, cmd, presentationId }) {
           <Button
             type="button"
             variant="secondary"
-            disabled={!cmd.getSelected()}
+            disabled={slide ? false : !cmd.getSelected()}
             onClick={() => setMediaOpen(true)}
           >
             {__("messages.inspector.filler_choose_image")}
@@ -515,7 +566,7 @@ export function FillerSection({ st, cmd, presentationId }) {
             <Button
               type="button"
               variant={st.backgroundSize === "cover" ? "default" : "secondary"}
-              disabled={!cmd.getSelected()}
+              disabled={slide ? false : !cmd.getSelected()}
               onClick={() => setImageFit("cover")}
             >
               {__("messages.inspector.filler_fit_cover")}
@@ -523,7 +574,7 @@ export function FillerSection({ st, cmd, presentationId }) {
             <Button
               type="button"
               variant={st.backgroundSize === "contain" ? "default" : "secondary"}
-              disabled={!cmd.getSelected()}
+              disabled={slide ? false : !cmd.getSelected()}
               onClick={() => setImageFit("contain")}
             >
               {__("messages.inspector.filler_fit_contain")}
@@ -531,21 +582,25 @@ export function FillerSection({ st, cmd, presentationId }) {
             <Button
               type="button"
               variant={st.backgroundSize === "auto" ? "default" : "secondary"}
-              disabled={!cmd.getSelected()}
+              disabled={slide ? false : !cmd.getSelected()}
               onClick={() => setImageFit("auto")}
             >
               {__("messages.inspector.filler_fit_auto")}
             </Button>
           </div>
           {imageUrl && imageUrl !== "none" && (
-            <Button type="button" variant="ghost" disabled={!cmd.getSelected()} onClick={removeImage}>
+            <Button type="button" variant="ghost" disabled={slide ? false : !cmd.getSelected()} onClick={removeImage}>
               {__("messages.inspector.filler_remove_image")}
             </Button>
-          )}
-        </div>
+           )}
+         </div>
+       )}
+
+      {mode !== "none" && (
+        <BlurControl value={parseBlur(st.backdropFilter)} onChange={applyBackdropBlur} />
       )}
 
-      <MediaPickerDialog
+       <MediaPickerDialog
         open={mediaOpen}
         onClose={() => setMediaOpen(false)}
         onPick={handleImagePick}
@@ -575,12 +630,13 @@ function ColorField({ label, value, onChange }) {
 
 // Background-opacity slider. Lives below the colour pickers for both solid and
 // gradient fills; the chosen alpha is folded into the colour via `withAlpha`.
-function OpacityControl({ value, onChange }) {
+// `labelKey` lets the gradient stop controls label each slider ("from"/"to").
+function OpacityControl({ value, onChange, labelKey }) {
   const pct = Math.round((value ?? 1) * 100);
   return (
     <Label>
       <span className="flex items-center justify-between">
-        <span>{__("messages.inspector.filler_opacity")}</span>
+        <span>{__(labelKey ?? "messages.inspector.filler_opacity")}</span>
         <span className="text-[11px] font-semibold text-[var(--muted-foreground)]">{pct}%</span>
       </span>
       <input
@@ -589,6 +645,30 @@ function OpacityControl({ value, onChange }) {
         max={100}
         value={pct}
         onChange={(e) => onChange(Number(e.target.value) / 100)}
+        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-[var(--secondary)] accent-[var(--navy)]"
+      />
+    </Label>
+  );
+}
+
+// Backdrop-blur slider. Sets CSS `backdrop-filter: blur(Npx)` (with the
+// `-webkit-` prefix for Safari) so the element frosts whatever content sits
+// behind it. The value reads/writes through the inspector's style snapshot.
+function BlurControl({ value, onChange }) {
+  const px = Math.round(Number(value) || 0);
+  return (
+    <Label>
+      <span className="flex items-center justify-between">
+        <span>{__("messages.inspector.filler_blur")}</span>
+        <span className="text-[11px] font-semibold text-[var(--muted-foreground)]">{px}px</span>
+      </span>
+      <input
+        type="range"
+        min={0}
+        max={40}
+        step={1}
+        value={px}
+        onChange={(e) => onChange(Number(e.target.value))}
         className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-[var(--secondary)] accent-[var(--navy)]"
       />
     </Label>
@@ -818,16 +898,55 @@ function ShadowField({ value, onChange }) {
   );
 }
 
-function NumberField({ label, unit, value, onChange }) {
+// Numeric editor with a *local* buffer so the engine's save round-trip can
+// never clobber what the user is mid-typing. A fully-controlled `type="number"`
+// fed straight from the engine snapshot resets the field on every keystroke
+// (the browser normalises "1." / "1.50" / leading zeros, and the re-derived
+// value overwrites the input) — which felt like the field was "blocked" and
+// only worked intermittently. We hold the raw text locally and only re-sync
+// from props when the *external* value actually changes (e.g. a nudge or a
+// different selection), never while typing. The local buffer is the source of
+// truth during editing — we deliberately do NOT reset it on blur, because the
+// `value` prop may still reflect the pre-edit value at that moment and would
+// otherwise wipe the field (and make it look like the style was never saved).
+export function NumberField({ label, unit, value, onChange, placeholder }) {
+  const [text, setText] = useState(() => (value ?? ""));
+  // The last `value` prop we observed and already mirrored into `text`. We only
+  // overwrite the local buffer when this changes — i.e. an external update, not
+  // the user's own keystrokes (which already set `text` via onChange).
+  const seenProp = useRef(value ?? "");
+
+  useEffect(() => {
+    const external = value ?? "";
+    if (String(external) !== String(seenProp.current)) {
+      seenProp.current = external;
+      setText(external);
+    }
+  }, [value]);
+
   return (
     <Label>
       <span>{label}</span>
       <span className="relative flex items-center">
         <Input
-          type="number"
+          type="text"
+          inputMode="decimal"
           className="pr-7 text-right"
-          value={value ?? ""}
-          onChange={(e) => onChange?.(e.target.value)}
+          value={text}
+          placeholder={placeholder}
+          onChange={(e) => {
+            const v = e.target.value;
+            // Allow only a valid (possibly partial) numeric: optional sign,
+            // digits and a single decimal point. Free-text input otherwise
+            // accepts letters; this keeps it a numeric field while still
+            // permitting mid-entry states like "-" or "1.".
+            if (v !== "" && !/^-?\d*\.?\d*$/.test(v)) {
+              setText(v);
+              return;
+            }
+            setText(v);
+            onChange?.(v);
+          }}
         />
         {unit && (
           <span className="pointer-events-none absolute right-2 text-[11px] text-[var(--muted-foreground)]">
@@ -849,13 +968,27 @@ function Section({ id, label, children }) {
 }
 
 export default function Inspector() {
-  const { selection, cmd, presentationId, html, slideKey } = useEditor();
+  const { selection, cmd, presentationId, html, slideKey, requestRenameBox } = useEditor();
   const [tab, setTab] = useState("props");
   const [nudgeStep, setNudgeStep] = useState(8);
   const [listKind, setListKind] = useState(null);
   const [layers, setLayers] = useState([]);
   const [dragPath, setDragPath] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
+
+  // Rename controller for the Layers panel. Double-clicking a row opens
+  // the shared RenameDialog with the current name pre-filled. Committing
+  // renames the box on the slide via the engine and refreshes the tree.
+  const onRename = {
+    start: (path, name) => requestRenameBox(path, name),
+    cancel: () => {},
+    commit: (path, name) => {
+      if (name) {
+        cmd.selectByPath(path);
+        cmd.renameSelected(name);
+      }
+    },
+  };
 
   // Drag-and-drop controller for the Layers panel. `preview` only updates the
   // visual drop indicator; `commit` performs the actual DOM move through the
@@ -886,6 +1019,40 @@ export default function Inspector() {
   const s = selection;
   const box = s?.box ?? {};
   const st = s?.styles ?? {};
+  // When nothing is selected we switch to "slide mode": the right panel themes
+  // the whole slide (its parent div) — background + typography — instead of a
+  // box. Selecting any element flips back to per-element editing.
+  const slideMode = !s;
+  const SLIDE_STYLE_KEYS = [
+    "backgroundColor", "background", "backgroundImage", "backgroundSize",
+    "backgroundRepeat", "backgroundPosition", "fontFamily", "fontSize",
+    "lineHeight", "letterSpacing", "opacity",
+    "backdropFilter", "webkitBackdropFilter",
+  ];
+  // Derive the slide-root styles from the persisted `html` (React state) rather
+  // than from the live engine DOM. Reading the live element is unreliable here:
+  // on load/reload the engine is rebuilt and `registerEngine` only mutates a
+  // ref (no re-render), so the Inspector can render while `engineRef.current`
+  // is briefly null/old and report an empty style — leaving the inputs blank
+  // even though the slide canvas shows the saved theme. The `html` string is
+  // the authoritative, always-up-to-date source and updates on every load.
+  const readSlideStyles = useMemo(() => {
+    const div = document.createElement("div");
+    div.innerHTML = html || "";
+    // Only the `.slide` element itself carries the theme; a legacy save with no
+    // `.slide` wrapper has no root styles, so leave them blank rather than
+    // misreading a child element's inline style as the slide theme.
+    const slide = div.querySelector(".slide");
+    const cs = slide ? slide.style : {};
+    const out = {};
+    SLIDE_STYLE_KEYS.forEach((k) => {
+      out[k] = cs[k] || "";
+    });
+    return out;
+  }, [html, slideMode]);
+  const est = slideMode ? readSlideStyles : st;
+  const applyStyle = slideMode ? cmd.setSlideStyle : cmd.setStyle;
+  const applyStyles = slideMode ? cmd.setSlideStyles : cmd.setStyles;
   const disabled = !s;
 
   const editorRef = useRef(null);
@@ -1016,8 +1183,8 @@ export default function Inspector() {
     setListKind(computeListKind());
   };
 
-  const setStyle = (prop, value) => cmd.setStyle(prop, value);
-  const setPx = (prop, value) => cmd.setStyle(prop, value === "" ? "" : `${value}px`);
+  const setStyle = (prop, value) => applyStyle(prop, value);
+  const setPx = (prop, value) => applyStyle(prop, value === "" ? "" : `${value}px`);
 
   const V_MAP = { start: "flex-start", center: "center", end: "flex-end" };
   const H_MAP = { left: "flex-start", center: "center", right: "flex-end" };
@@ -1051,172 +1218,190 @@ export default function Inspector() {
         </div>
 
         <TabsContent value="props" className="flex-1 overflow-auto px-4 pb-4">
-          <Accordion type="multiple" defaultValue={["text", "position"]} className="grid gap-2">
-            <Section id="text" label={__("messages.inspector.section_text")}>
-              <div
-                ref={editorRef}
-                contentEditable
-                suppressContentEditableWarning
-                onInput={() => { editorDirty.current = true; syncToSlide(); }}
-                onBlur={() => syncToSlide()}
-                data-placeholder={__("messages.inspector.text_placeholder")}
-                className="rt-editor min-h-[84px] w-full resize-y overflow-auto rounded-md border leading-relaxed text-[var(--foreground)] outline-none focus-ring [&_ul]:list-disc [&_ul]:m-0 [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:m-0 [&_ol]:pl-5 [&_li]:my-0.5"
-              />
-              <div className="mt-1.5 flex overflow-hidden rounded-md border border-[var(--border)]">
-                <button onMouseDown={(e) => e.preventDefault()} onClick={() => format("bold")} className="flex h-8 flex-1 items-center justify-center border-r border-[var(--border)] font-bold hover:bg-[var(--navy)]/5" aria-label={__("messages.inspector.bold")}>
-                  <Bold className="size-4" />
-                </button>
-                <button onMouseDown={(e) => e.preventDefault()} onClick={() => format("italic")} className="flex h-8 flex-1 items-center justify-center border-r border-[var(--border)] italic hover:bg-[var(--navy)]/5" aria-label={__("messages.inspector.italic")}>
-                  <Italic className="size-4" />
-                </button>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      onMouseDown={(e) => e.preventDefault()}
-                      className={cn("flex h-8 flex-1 items-center justify-center border-r border-[var(--border)] hover:bg-[var(--navy)]/5", listKind && "bg-[var(--navy)]/10 text-[var(--navy)]")}
-                      aria-label={__("messages.inspector.list")}
-                    >
-                      <List className="size-4" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-1" align="start">
-                    {[
-                      { k: "ordered", label: __("messages.inspector.list_ordered"), Icon: ListOrdered },
-                      { k: "disc", label: __("messages.inspector.list_disc"), Icon: List },
-                      { k: "circle", label: __("messages.inspector.list_circle"), Icon: List },
-                      { k: "square", label: __("messages.inspector.list_square"), Icon: List },
-                    ].map((opt) => (
+          {slideMode && (
+            <div className="mb-2 rounded-md border border-[var(--border)] bg-[var(--secondary)]/60 px-3 py-2">
+              <p className="text-[12px] font-semibold text-[var(--foreground)]">
+                {__("messages.inspector.slide_mode_title")}
+              </p>
+              <p className="mt-0.5 text-[11px] text-[var(--muted-foreground)]">
+                {__("messages.inspector.slide_mode_hint")}
+              </p>
+            </div>
+          )}
+          <Accordion
+            type="multiple"
+            defaultValue={slideMode ? ["typography", "filler"] : ["text", "position"]}
+            className="grid gap-2"
+          >
+            {!slideMode && (
+              <Section id="text" label={__("messages.inspector.section_text")}>
+                <div
+                  ref={editorRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onInput={() => { editorDirty.current = true; syncToSlide(); }}
+                  onBlur={() => syncToSlide()}
+                  data-placeholder={__("messages.inspector.text_placeholder")}
+                  className="rt-editor min-h-[84px] w-full resize-y overflow-auto rounded-md border leading-relaxed text-[var(--foreground)] outline-none focus-ring [&_ul]:list-disc [&_ul]:m-0 [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:m-0 [&_ol]:pl-5 [&_li]:my-0.5"
+                />
+                <div className="mt-1.5 flex overflow-hidden rounded-md border border-[var(--border)]">
+                  <button onMouseDown={(e) => e.preventDefault()} onClick={() => format("bold")} className="flex h-8 flex-1 items-center justify-center border-r border-[var(--border)] font-bold hover:bg-[var(--navy)]/5" aria-label={__("messages.inspector.bold")}>
+                    <Bold className="size-4" />
+                  </button>
+                  <button onMouseDown={(e) => e.preventDefault()} onClick={() => format("italic")} className="flex h-8 flex-1 items-center justify-center border-r border-[var(--border)] italic hover:bg-[var(--navy)]/5" aria-label={__("messages.inspector.italic")}>
+                    <Italic className="size-4" />
+                  </button>
+                  <Popover>
+                    <PopoverTrigger asChild>
                       <button
-                        key={opt.k}
-                        type="button"
-                        onMouseDown={pd}
-                        onClick={() => applyList(opt.k)}
-                        aria-pressed={listKind === opt.k}
-                        className={cn(
-                          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-[var(--navy)]/5",
-                          listKind === opt.k ? "bg-[var(--navy)]/10 text-[var(--navy)]" : "text-[var(--foreground)]"
-                        )}
+                        onMouseDown={(e) => e.preventDefault()}
+                        className={cn("flex h-8 flex-1 items-center justify-center border-r border-[var(--border)] hover:bg-[var(--navy)]/5", listKind && "bg-[var(--navy)]/10 text-[var(--navy)]")}
+                        aria-label={__("messages.inspector.list")}
                       >
-                        <opt.Icon className="size-4" />
-                        <span>{opt.label}</span>
+                        <List className="size-4" />
                       </button>
-                    ))}
-                  </PopoverContent>
-                </Popover>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      onMouseDown={(e) => e.preventDefault()}
-                      className="flex h-8 flex-1 items-center justify-center hover:bg-[var(--navy)]/5"
-                      aria-label={__("messages.inspector.align")}
-                    >
-                      {hAlign === "center" ? <AlignCenter className="size-4" /> : hAlign === "right" ? <AlignRight className="size-4" /> : <AlignLeft className="size-4" />}
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-2" align="start">
-                    <p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-[0.09em] text-[var(--muted-foreground)]">{__("messages.inspector.align_horizontal")}</p>
-                    <div className="grid grid-cols-3 gap-1">
-                      <AlignOption icon={AlignLeft} active={hAlign === "left"} label={__("messages.inspector.align_left")} onClick={() => setHAlign("left")} />
-                      <AlignOption icon={AlignCenter} active={hAlign === "center"} label={__("messages.inspector.align_center")} onClick={() => setHAlign("center")} />
-                      <AlignOption icon={AlignRight} active={hAlign === "right"} label={__("messages.inspector.align_right")} onClick={() => setHAlign("right")} />
-                    </div>
-                    <p className="mb-1 mt-2 px-1 text-[10px] font-bold uppercase tracking-[0.09em] text-[var(--muted-foreground)]">{__("messages.inspector.align_vertical")}</p>
-                    <div className="grid grid-cols-3 gap-1">
-                      <AlignOption icon={AlignStartVertical} active={vAlign === "start"} label={__("messages.inspector.align_top")} onClick={() => setVAlign("start")} />
-                      <AlignOption icon={AlignCenterVertical} active={vAlign === "center"} label={__("messages.inspector.align_middle")} onClick={() => setVAlign("center")} />
-                      <AlignOption icon={AlignEndVertical} active={vAlign === "end"} label={__("messages.inspector.align_bottom")} onClick={() => setVAlign("end")} />
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </Section>
-
-            <Section id="position" label={__("messages.inspector.section_position")}>
-              <div className="grid grid-cols-2 gap-2">
-                <NumberField label={__("messages.inspector.label_x")} unit="px" value={num(st.left) || box.x} onChange={(v) => setPx("left", v)} />
-                <NumberField label={__("messages.inspector.label_y")} unit="px" value={num(st.top) || box.y} onChange={(v) => setPx("top", v)} />
-                <NumberField label={__("messages.inspector.label_w")} unit="px" value={num(st.width) || box.w} onChange={(v) => setPx("width", v)} />
-                <NumberField label={__("messages.inspector.label_h")} unit="px" value={num(st.height) || box.h} onChange={(v) => setPx("height", v)} />
-              </div>
-              <div className="grid grid-cols-2 items-end gap-2">
-                <NumberField label={__("messages.inspector.step")} unit="px" value={nudgeStep} onChange={(v) => setNudgeStep(Number(v) || 1)} />
-                <div className="nudge-pad grid-cols-4 gap-1">
-                  <Button variant="ghost" size="icon-sm" disabled={disabled} onClick={() => cmd.nudge(-nudgeStep, 0)} aria-label={__("messages.layers.left")}><ChevronDown className="rotate-90" /></Button>
-                  <Button variant="ghost" size="icon-sm" disabled={disabled} onClick={() => cmd.nudge(0, -nudgeStep)} aria-label={__("messages.layers.up")}><ChevronUp /></Button>
-                  <Button variant="ghost" size="icon-sm" disabled={disabled} onClick={() => cmd.nudge(0, nudgeStep)} aria-label={__("messages.layers.down")}><ChevronDown /></Button>
-                  <Button variant="ghost" size="icon-sm" disabled={disabled} onClick={() => cmd.nudge(nudgeStep, 0)} aria-label={__("messages.layers.right")}><ChevronUp className="rotate-90" /></Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-1" align="start">
+                      {[
+                        { k: "ordered", label: __("messages.inspector.list_ordered"), Icon: ListOrdered },
+                        { k: "disc", label: __("messages.inspector.list_disc"), Icon: List },
+                        { k: "circle", label: __("messages.inspector.list_circle"), Icon: List },
+                        { k: "square", label: __("messages.inspector.list_square"), Icon: List },
+                      ].map((opt) => (
+                        <button
+                          key={opt.k}
+                          type="button"
+                          onMouseDown={pd}
+                          onClick={() => applyList(opt.k)}
+                          aria-pressed={listKind === opt.k}
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-[var(--navy)]/5",
+                            listKind === opt.k ? "bg-[var(--navy)]/10 text-[var(--navy)]" : "text-[var(--foreground)]"
+                          )}
+                        >
+                          <opt.Icon className="size-4" />
+                          <span>{opt.label}</span>
+                        </button>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        onMouseDown={(e) => e.preventDefault()}
+                        className="flex h-8 flex-1 items-center justify-center hover:bg-[var(--navy)]/5"
+                        aria-label={__("messages.inspector.align")}
+                      >
+                        {hAlign === "center" ? <AlignCenter className="size-4" /> : hAlign === "right" ? <AlignRight className="size-4" /> : <AlignLeft className="size-4" />}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-2" align="start">
+                      <p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-[0.09em] text-[var(--muted-foreground)]">{__("messages.inspector.align_horizontal")}</p>
+                      <div className="grid grid-cols-3 gap-1">
+                        <AlignOption icon={AlignLeft} active={hAlign === "left"} label={__("messages.inspector.align_left")} onClick={() => setHAlign("left")} />
+                        <AlignOption icon={AlignCenter} active={hAlign === "center"} label={__("messages.inspector.align_center")} onClick={() => setHAlign("center")} />
+                        <AlignOption icon={AlignRight} active={hAlign === "right"} label={__("messages.inspector.align_right")} onClick={() => setHAlign("right")} />
+                      </div>
+                      <p className="mb-1 mt-2 px-1 text-[10px] font-bold uppercase tracking-[0.09em] text-[var(--muted-foreground)]">{__("messages.inspector.align_vertical")}</p>
+                      <div className="grid grid-cols-3 gap-1">
+                        <AlignOption icon={AlignStartVertical} active={vAlign === "start"} label={__("messages.inspector.align_top")} onClick={() => setVAlign("start")} />
+                        <AlignOption icon={AlignCenterVertical} active={vAlign === "center"} label={__("messages.inspector.align_middle")} onClick={() => setVAlign("center")} />
+                        <AlignOption icon={AlignEndVertical} active={vAlign === "end"} label={__("messages.inspector.align_bottom")} onClick={() => setVAlign("end")} />
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
-              </div>
-            </Section>
+              </Section>
+            )}
+
+            {!slideMode && (
+              <Section id="position" label={__("messages.inspector.section_position")}>
+                <div className="grid grid-cols-2 gap-2">
+                <NumberField label={__("messages.inspector.label_x")} unit="px" value={num(st.left)} placeholder={box.x} onChange={(v) => setPx("left", v)} />
+                <NumberField label={__("messages.inspector.label_y")} unit="px" value={num(st.top)} placeholder={box.y} onChange={(v) => setPx("top", v)} />
+                <NumberField label={__("messages.inspector.label_w")} unit="px" value={num(st.width)} placeholder={box.w} onChange={(v) => setPx("width", v)} />
+                <NumberField label={__("messages.inspector.label_h")} unit="px" value={num(st.height)} placeholder={box.h} onChange={(v) => setPx("height", v)} />
+                </div>
+                <div className="grid grid-cols-2 items-end gap-2">
+                  <NumberField label={__("messages.inspector.step")} unit="px" value={nudgeStep} onChange={(v) => setNudgeStep(Number(v) || 1)} />
+                  <div className="nudge-pad grid-cols-4 gap-1">
+                    <Button variant="ghost" size="icon-sm" disabled={disabled} onClick={() => cmd.nudge(-nudgeStep, 0)} aria-label={__("messages.layers.left")}><ChevronDown className="rotate-90" /></Button>
+                    <Button variant="ghost" size="icon-sm" disabled={disabled} onClick={() => cmd.nudge(0, -nudgeStep)} aria-label={__("messages.layers.up")}><ChevronUp /></Button>
+                    <Button variant="ghost" size="icon-sm" disabled={disabled} onClick={() => cmd.nudge(0, nudgeStep)} aria-label={__("messages.layers.down")}><ChevronDown /></Button>
+                    <Button variant="ghost" size="icon-sm" disabled={disabled} onClick={() => cmd.nudge(nudgeStep, 0)} aria-label={__("messages.layers.right")}><ChevronUp className="rotate-90" /></Button>
+                  </div>
+                </div>
+              </Section>
+            )}
 
             <Section id="typography" label={__("messages.inspector.section_typography")}>
               <Label>
                 <span>{__("messages.inspector.font")}</span>
-                <select
-                  value={st.fontFamily?.replace(/["']/g, "") || ""}
-                  onChange={(e) => setStyle("fontFamily", e.target.value)}
-                  className="input-base focus-ring h-9 w-full px-2"
-                >
-                  <option value="" />
-                  {FONTS.map((f) => (
-                    <option key={f} value={f}>{f}</option>
-                  ))}
-                </select>
+                <FontSelector
+                  value={est.fontFamily || ""}
+                  onChange={(stack) => setStyle("fontFamily", stack)}
+                />
               </Label>
               <div className="grid grid-cols-2 gap-2">
-                <NumberField label={__("messages.inspector.size")} unit="px" value={num(st.fontSize)} onChange={(v) => setPx("fontSize", v)} />
-                <NumberField label={__("messages.inspector.line_height")} value={num(st.lineHeight)} onChange={(v) => setStyle("lineHeight", v)} />
-                <NumberField label={__("messages.inspector.letter_spacing")} unit="px" value={num(st.letterSpacing)} onChange={(v) => setPx("letterSpacing", v)} />
-                <NumberField label={__("messages.inspector.opacity")} value={num(st.opacity)} onChange={(v) => setStyle("opacity", v)} />
+                <NumberField label={__("messages.inspector.size")} unit="px" value={num(est.fontSize)} onChange={(v) => setPx("fontSize", v)} />
+                <NumberField label={__("messages.inspector.line_height")} value={num(est.lineHeight)} onChange={(v) => setStyle("lineHeight", v)} />
+                <NumberField label={__("messages.inspector.letter_spacing")} unit="px" value={num(est.letterSpacing)} onChange={(v) => setPx("letterSpacing", v)} />
+                <NumberField label={__("messages.inspector.opacity")} value={num(est.opacity)} onChange={(v) => setStyle("opacity", v)} />
               </div>
             </Section>
 
             <Section id="filler" label={__("messages.inspector.section_filler")}>
-              <FillerSection st={st} cmd={cmd} presentationId={presentationId} />
+              <FillerSection st={est} cmd={cmd} presentationId={presentationId} slide={slideMode} />
             </Section>
 
-            <Section id="shape" label={__("messages.inspector.section_shape")}>
-              <div className="grid grid-cols-2 gap-2">
-                <NumberField label={__("messages.inspector.space")} unit="px" value={num(st.padding)} onChange={(v) => setPx("padding", v)} />
-                <NumberField label={__("messages.inspector.radius")} unit="px" value={num(st.borderRadius)} onChange={(v) => setPx("borderRadius", v)} />
-                <NumberField label={__("messages.inspector.border")} unit="px" value={num(st.borderWidth)} onChange={(v) => setPx("borderWidth", v)} />
+            {!slideMode && (
+              <Section id="shape" label={__("messages.inspector.section_shape")}>
+                <div className="grid grid-cols-2 gap-2">
+                  <NumberField label={__("messages.inspector.space")} unit="px" value={num(st.padding)} onChange={(v) => setPx("padding", v)} />
+                  <NumberField label={__("messages.inspector.radius")} unit="px" value={num(st.borderRadius)} onChange={(v) => setPx("borderRadius", v)} />
+                  <NumberField label={__("messages.inspector.border")} unit="px" value={num(st.borderWidth)} onChange={(v) => setPx("borderWidth", v)} />
+                  <Label>
+                    <span>{__("messages.inspector.style")}</span>
+                    <select
+                      value={st.borderStyle || ""}
+                      onChange={(e) => setStyle("borderStyle", e.target.value)}
+                      className="input-base h-9 w-full px-2"
+                    >
+                      <option value="">{__("messages.inspector.style_auto")}</option>
+                      <option value="none">{__("messages.inspector.style_none")}</option>
+                      <option value="solid">{__("messages.inspector.style_solid")}</option>
+                      <option value="dashed">{__("messages.inspector.style_dashed")}</option>
+                    </select>
+                  </Label>
+                  <ColorField label={__("messages.inspector.border_color")} value={st.borderColor} onChange={(v) => setStyle("borderColor", v)} />
+                </div>
                 <Label>
-                  <span>{__("messages.inspector.style")}</span>
-                  <select
-                    value={st.borderStyle || ""}
-                    onChange={(e) => setStyle("borderStyle", e.target.value)}
-                    className="input-base h-9 w-full px-2"
-                  >
-                    <option value="">{__("messages.inspector.style_auto")}</option>
-                    <option value="none">{__("messages.inspector.style_none")}</option>
-                    <option value="solid">{__("messages.inspector.style_solid")}</option>
-                    <option value="dashed">{__("messages.inspector.style_dashed")}</option>
-                  </select>
+                  <span>{__("messages.inspector.shadow")}</span>
+                  <ShadowField value={st.boxShadow} onChange={(v) => setStyle("boxShadow", v)} />
                 </Label>
-                <ColorField label={__("messages.inspector.border_color")} value={st.borderColor} onChange={(v) => setStyle("borderColor", v)} />
-              </div>
-              <Label>
-                <span>{__("messages.inspector.shadow")}</span>
-                <ShadowField value={st.boxShadow} onChange={(v) => setStyle("boxShadow", v)} />
-              </Label>
-            </Section>
+              </Section>
+            )}
 
-            <Section id="actions" label={__("messages.inspector.section_actions")}>
-              <div className="grid grid-cols-2 gap-1.5">
-                <Button variant="secondary" disabled={disabled || !s.multi} onClick={cmd.group}>{__("messages.inspector.group")}</Button>
-                <Button variant="secondary" disabled={disabled || !s.isGroup} onClick={cmd.ungroup}>{__("messages.inspector.ungroup")}</Button>
-                <Button variant="secondary" disabled={disabled} onClick={() => setStyle("position", "absolute")}>{__("messages.inspector.make_absolute")}</Button>
-              </div>
-            </Section>
+            {!slideMode && (
+              <Section id="actions" label={__("messages.inspector.section_actions")}>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <Button variant="secondary" disabled={disabled || !s.multi} onClick={cmd.group}>{__("messages.inspector.group")}</Button>
+                  <Button variant="secondary" disabled={disabled || !s.isGroup} onClick={cmd.ungroup}>{__("messages.inspector.ungroup")}</Button>
+                  <Button variant="secondary" disabled={disabled} onClick={() => setStyle("position", "absolute")}>{__("messages.inspector.make_absolute")}</Button>
+                </div>
+              </Section>
+            )}
           </Accordion>
-          <Button
-            variant="outline"
-            disabled={disabled}
-            onClick={cmd.clearFormatting}
-            className="mt-3 w-full"
-          >
-            {__("messages.inspector.clear_formatting")}
-          </Button>
+          {!slideMode && (
+            <Button
+              variant="outline"
+              disabled={disabled}
+              onClick={cmd.clearFormatting}
+              className="mt-3 w-full"
+            >
+              {__("messages.inspector.clear_formatting")}
+            </Button>
+          )}
         </TabsContent>
 
         <TabsContent value="layers" className="flex flex-1 flex-col overflow-hidden">
@@ -1244,6 +1429,7 @@ export default function Inspector() {
                     setDragPath={setDragPath}
                     onMove={onMove}
                     dropTarget={dropTarget}
+                    onStartRename={onRename.start}
                   />
                 ))}
               </ul>

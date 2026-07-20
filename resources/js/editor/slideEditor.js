@@ -154,8 +154,18 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     const clone = slideRoot().cloneNode(true);
     clone.querySelectorAll("[contenteditable]").forEach((n) => n.removeAttribute("contenteditable"));
     sanitizeAttributes(clone);
+    // The slide ROOT element itself is now part of the persisted HTML (its own
+    // inline styles — background, font — are what "slide mode" edits target),
+    // so a corrupted attribute on the root must be stripped too, not just on
+    // its descendants.
+    for (const name of [...clone.getAttributeNames()]) {
+      if (INVALID_ATTR.test(name)) clone.removeAttribute(name);
+    }
     if (editCursor !== null) selected.style.cursor = editCursor;
-    return rewriteMediaUrlsToStorage(clone.innerHTML);
+    // Serialise the whole slide element (outerHTML), not just its children:
+    // `.slide`'s own attributes/style carry the theme the user applied in
+    // slide mode and must survive both save and reload.
+    return rewriteMediaUrlsToStorage(clone.outerHTML);
   }
 
   function pushHistory() {
@@ -190,6 +200,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     onSelection({
       tag: selected.tagName.toLowerCase(),
       path,
+      name: selected.getAttribute("data-slide-name") || "",
       isGroup: !!(selected.getAttribute && selected.getAttribute("data-slide-group")),
       multi: selectedSet.filter((el) => el.isConnected).length > 1,
       count: selectedSet.filter((el) => el.isConnected).length,
@@ -223,6 +234,8 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
         alignItems: selected.style.alignItems,
         textAlign: selected.style.textAlign,
         padding: selected.style.padding,
+        backdropFilter: selected.style.backdropFilter,
+        webkitBackdropFilter: selected.style.webkitBackdropFilter,
       },
       icon: findIcon(),
       editableText: isTextEditable(selected),
@@ -818,7 +831,25 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     // Rename against every name currently on the slide (the colliding sibling
     // is included, so the clone becomes "texto-2" rather than keeping "texto").
     el.setAttribute(NAME_ATTR, uniqueName(current, collectNames()));
-  }  function setEditable(on) {
+  }
+
+  // Rename the currently selected box. Used by the context-menu "Rename" action
+  // and the inline rename in the Layers panel. An explicit name replaces any
+  // auto placeholder and is kept verbatim (the Layers panel shows it as-is; it
+  // is no longer used as a CSS selector, so free text is safe). Re-selecting and
+  // re-emitting keeps the panel/hover label in sync and records the change.
+  function renameSelected(name) {
+    if (!selected) return;
+    const clean = (name ?? "").toString().trim();
+    if (!clean) return; // ignore empty renames
+    selected.setAttribute(NAME_ATTR, clean);
+    selected.removeAttribute(NAME_DEFAULT_ATTR);
+    selectionInfo();
+    pushHistory();
+    emit();
+  }
+
+  function setEditable(on) {
     if (!selected || !isTextEditable(selected)) return;
     selected.setAttribute("contenteditable", on ? "true" : "false");
     if (on) selected.focus();
@@ -1055,6 +1086,40 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     });
     positionOverlay();
     selectionInfo();
+    emit();
+  }
+
+  // Style the slide root (parent div) itself rather than a selected box. Used
+  // when nothing is selected so the user can theme the whole slide — its
+  // background, font family/size, colour… — without an element to target.
+  function setSlideStyle(prop, value) {
+    const rootEl = slideRoot();
+    if (!rootEl) return;
+    if (value === "" || value === null || value === undefined) {
+      rootEl.style.removeProperty(prop);
+    } else {
+      rootEl.style[prop] = value;
+    }
+    emit();
+  }
+
+  function setSlideStyles(obj) {
+    const rootEl = slideRoot();
+    if (!rootEl) return;
+    const hasBackgroundShorthand = !!obj.background;
+    if (hasBackgroundShorthand) {
+      BG_LONGHANDS.forEach((k) =>
+        rootEl.style.removeProperty(k.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase()))
+      );
+    }
+    Object.entries(obj).forEach(([k, v]) => {
+      if (hasBackgroundShorthand && BG_LONGHANDS.includes(k)) return;
+      if (v === "" || v === null || v === undefined) {
+        rootEl.style.removeProperty(k.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase()));
+      } else {
+        rootEl.style[k] = v;
+      }
+    });
     emit();
   }
 
@@ -2031,6 +2096,7 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     select,
     selectByPath,
     moveElement,
+    renameSelected,
     clearSelection,
     getSlideRoot: slideRoot,
     getLayerTree,
@@ -2040,6 +2106,8 @@ export function createSlideEditor({ root, stage, onChange, onSelection, onEditin
     exitTextEdit,
     setStyle,
     setStyles,
+    setSlideStyle,
+    setSlideStyles,
     applyTextCommand,
     setTextColor,
     saveSelection,

@@ -41,15 +41,23 @@ const SlideCanvas = forwardRef(function SlideCanvas(
     if (!shadowRef.current) {
       shadowRef.current = host.attachShadow({ mode: "open" });
     }
-    // Always wrap the slide content in a real `.slide` root. This guarantees
-    // `slideRoot()` (in slideEditor.js) resolves to a positioned container and
-    // never to the injected <style> base element — otherwise inserted text
-    // boxes get appended *inside* the <style> and never render. The wrapper is
-    // 100% of the host (the 1600x900 frame) so absolutely-positioned slide
-    // elements size/position against it.
+    // The persisted slide HTML may be either:
+    //   - the full `<div class="slide" …>…</div>` element (root styles such as
+    //     background/font are part of it), or
+    //   - just its inner content (legacy saves).
+    // Wrap the legacy case so `slideRoot()` still resolves to a positioned
+    // container; when the root element is already present, inject it verbatim
+    // so its own styles survive the reload.
+    const raw = rewriteMediaUrlsToPreview(html) || "";
+    const probe = document.createElement("div");
+    probe.innerHTML = raw;
+    const rootEl = probe.firstElementChild;
+    const wrapped =
+      rootEl && rootEl.classList && rootEl.classList.contains("slide")
+        ? raw
+        : `<div class="slide" data-slide-root="1" style="position:relative;width:100%;height:100%;overflow:hidden">${raw}</div>`;
     shadowRef.current.innerHTML =
-      `<style data-slide-base="1">${BASE_CSS}</style>` +
-      `<div class="slide" data-slide-root="1" style="position:relative;width:100%;height:100%;overflow:hidden">${rewriteMediaUrlsToPreview(html) || ""}</div>`;
+      `<style data-slide-base="1">${BASE_CSS}</style>` + wrapped;
     // Intentionally empty deps so this runs only on mount/remount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
